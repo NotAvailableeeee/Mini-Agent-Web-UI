@@ -61,7 +61,7 @@
 
 项目初启动时会进行 Agent 初始化步骤，5 个步骤逐步点亮，完全同步后端时间节点：
 
-<video controls width="100%"><source src="./docs/assets/init-layout.mp4" type="video/mp4"></video>
+https://github.com/user-attachments/assets/c5046d56-97a9-4d19-b0d7-d2766be95ed7
 
 主题切换 / 布局个性化
 
@@ -88,7 +88,8 @@
 **交互**：点击任意一个**已完成**的步骤槽，会展开该步骤的详情，
 详情里有 **真实执行过的源码片段**
 
-<video controls width="100%"><source src="./docs/assets/agent-init.mp4" type="video/mp4"></video>
+https://github.com/user-attachments/assets/2e5e8d6b-db72-477c-9bf9-5f4ebcca24d2
+
 
 ### 2.3 能力展示指引板
 
@@ -107,7 +108,10 @@
 
 点击后，你可以在**对话区域 / 记忆面板 / 工作区**里看到它留下的所有"痕迹"。
 
-<video controls width="100%"><source src="./docs/assets/showcase.mp4" type="video/mp4"></video>
+
+https://github.com/user-attachments/assets/c59eb3cb-1600-4617-ac7c-3b659889ca38
+
+
 
 ### 2.4 对话面板
 
@@ -161,10 +165,13 @@
 - 进度条颜色会随着数字增加而变化，绿->黄->红；
 - LLM 估算上下文长度即将超过阈值时，将暂停任务，先折叠上下文，然后继续任务，压缩后可在`短期记忆/原始数据`清晰看到上下文发生了变化，模型的回复被总结，同 Mini-Agent 项目设计的机制相同。
 
-<video controls width="100%"><source src="./docs/assets/compact.mp4" type="video/mp4"></video>
+https://github.com/user-attachments/assets/0d8106c1-6b29-4f64-b793-c119da9626c2
+
 
 进度条特写：
-<video controls width="100%"><source src="./docs/assets/compact2.mp4" type="video/mp4"></video>
+
+https://github.com/user-attachments/assets/d7fc0373-b525-4897-b4aa-0f425094ce23
+
 
 ### 2.5 工作区文件树(Workspace Tree)
 
@@ -214,11 +221,14 @@
 
 写入长期记忆-笔记：
 
-<video controls width="100%"><source src="./docs/assets/write_note.mp4" type="video/mp4"></video>
+
+https://github.com/user-attachments/assets/01e633f4-d9e8-43e5-88eb-8ed35062f04d
+
+
 
 读取长期记忆-笔记：
 
-<video controls width="100%"><source src="./docs/assets/read_note.mp4" type="video/mp4"></video>
+https://github.com/user-attachments/assets/9a6651a3-7916-4836-8039-ab401495428f
 
 #### 长期记忆-图谱(Long-term-graph)
 
@@ -232,11 +242,12 @@
 
 写入长期记忆-图谱：
 
-<video controls width="100%"><source src="./docs/assets/write_graph.mp4" type="video/mp4"></video>
+https://github.com/user-attachments/assets/6f6006eb-6d99-4370-b60a-c586e59e84d0
+
 
 读取长期记忆-图谱：
 
-<video controls width="100%"><source src="./docs/assets/read_graph.mp4" type="video/mp4"></video>
+https://github.com/user-attachments/assets/26f5f3a5-6192-4483-b08f-9a83de0830ef
 
 ---
 
