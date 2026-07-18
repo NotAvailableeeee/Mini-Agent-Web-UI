@@ -61,7 +61,7 @@
 
 项目初启动时会进行 Agent 初始化步骤，5 个步骤逐步点亮，完全同步后端时间节点：
 
-<video src="./docs/assets/init-layout.mp4" autoplay loop muted playsinline controls width="100%"></video>
+<img src="./docs/assets/init-layout.mp4" width="100%">
 
 主题切换 / 布局个性化
 
@@ -88,7 +88,7 @@
 **交互**：点击任意一个**已完成**的步骤槽，会展开该步骤的详情，
 详情里有 **真实执行过的源码片段**
 
-<video src="./docs/assets/agent-init.mp4" autoplay loop muted playsinline controls width="100%"></video>
+<img src="./docs/assets/agent-init.mp4" width="100%">
 
 ### 2.3 能力展示指引板
 
@@ -107,7 +107,7 @@
 
 点击后，你可以在**对话区域 / 记忆面板 / 工作区**里看到它留下的所有"痕迹"。
 
-<video src="./docs/assets/showcase.mp4" autoplay loop muted playsinline controls width="100%"></video>
+<img src="./docs/assets/showcase.mp4" width="100%">
 
 ### 2.4 对话面板
 
@@ -161,10 +161,10 @@
 - 进度条颜色会随着数字增加而变化，绿->黄->红；
 - LLM 估算上下文长度即将超过阈值时，将暂停任务，先折叠上下文，然后继续任务，压缩后可在`短期记忆/原始数据`清晰看到上下文发生了变化，模型的回复被总结，同 Mini-Agent 项目设计的机制相同。
 
-<video src="./docs/assets/compact.mp4" autoplay loop muted playsinline controls width="100%"></video>
+<img src="./docs/assets/compact.mp4" width="100%">
 
 进度条特写：
-<video src="./docs/assets/compact2.mp4" autoplay loop muted playsinline controls width="100%"></video>
+<img src="./docs/assets/compact2.mp4" width="100%">
 
 ### 2.5 工作区文件树(Workspace Tree)
 
@@ -214,11 +214,11 @@
 
 写入长期记忆-笔记：
 
-<video src="./docs/assets/write_note.mp4" autoplay loop muted playsinline controls width="100%"></video>
+<img src="./docs/assets/write_note.mp4" width="100%">
 
 读取长期记忆-笔记：
 
-<video src="./docs/assets/read_note.mp4" autoplay loop muted playsinline controls width="100%"></video>
+<img src="./docs/assets/read_note.mp4" width="100%">
 
 #### 长期记忆-图谱(Long-term-graph)
 
@@ -232,11 +232,11 @@
 
 写入长期记忆-图谱：
 
-<video src="./docs/assets/write_graph.mp4" autoplay loop muted playsinline controls width="100%"></video>
+<img src="./docs/assets/write_graph.mp4" width="100%">
 
 读取长期记忆-图谱：
 
-<video src="./docs/assets/read_graph.mp4" autoplay loop muted playsinline controls width="100%"></video>
+<img src="./docs/assets/read_graph.mp4" width="100%">
 
 ---
 
