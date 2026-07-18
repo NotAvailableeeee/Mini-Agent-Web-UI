@@ -1,0 +1,3871 @@
+/* Mini-Agent Web UI — light/dark themes.
+ *
+ * Light is the default; the dark palette sits under
+ * `:root[data-theme="dark"]` so flipping the attribute on <html>
+ * (driven by useTheme) re-paints every variable in one go. The
+ * highlight.js token colors are also CSS variables, so a single
+ * `data-theme` change re-skins code blocks too. */
+
+:root {
+  --bg: #f7f8fa;
+  --panel: #ffffff;
+  --panel-2: #f0f2f5;
+  --border: #e4e7ec;
+  --text: #1a1d23;
+  --text-dim: #6b7280;
+  --accent: #00a86b;        /* deeper green for AA contrast on white */
+  --accent-soft: #e6f7ef;
+  --assistant: #ca8a04;     /* mustard yellow for assistant replies */
+  --assistant-soft: #fefce8;
+  --tool: #b88400;          /* darker amber for contrast on white */
+  --error: #dc2626;
+  --error-bg: #fef2f2;
+
+  /* Long-term memory category palette — one distinct color per kind
+   * so users can scan the long-term panel by hue. `user_preference`
+   * intentionally has NO --cat-* variable: it falls through to the
+   * base `.note-category` rule (which uses --accent / green) so its
+   * visual identity stays aligned with the project-wide accent. All
+   * other swatches are tuned for AA contrast on the white panel. */
+  --cat-project-info: #2563eb;             /* blue  — project facts */
+  --cat-project-info-soft: #eff6ff;
+  --cat-decision: #b88400;                 /* amber — irreversible choices */
+  --cat-decision-soft: #fff8e6;
+  --cat-general: #6b7280;                  /* gray  — fallback */
+  --cat-general-soft: #f0f2f5;
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --radius: 10px;
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+               'Hiragino Sans GB', 'Microsoft YaHei', Roboto, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* highlight.js token colors — github-light palette. Re-defined
+   * under the dark theme below so the same `.hljs-keyword` rule
+   * re-skins automatically. */
+  --hljs-bg: #ffffff;
+  --hljs-comment: #6e7781;
+  --hljs-keyword: #cf222e;
+  --hljs-string: #0a3069;
+  --hljs-number: #0550ae;
+  --hljs-function: #8250df;
+  --hljs-class: #953800;
+  --hljs-variable: #24292f;
+  --hljs-title: #8250df;
+  --hljs-attr: #0550ae;
+  --hljs-built-in: #0550ae;
+  --hljs-meta: #6e7781;
+  --hljs-tag: #116329;
+  --hljs-line-number: #8c959f;
+  --hljs-line-border: #e4e7ec;
+}
+
+:root[data-theme="dark"] {
+  --bg: #0d1117;
+  --panel: #161b22;
+  --panel-2: #1c2128;
+  --border: #30363d;
+  --text: #e6edf3;
+  --text-dim: #8b949e;
+  --accent: #2ea043;        /* slightly brighter green for dark bg */
+  --accent-soft: rgba(46, 160, 67, 0.18);
+  --assistant: #facc15;     /* bright yellow for dark bg */
+  --assistant-soft: rgba(250, 204, 21, 0.16);
+  --tool: #d29922;
+  --error: #f85149;
+  --error-bg: #2d1416;
+
+  /* Long-term category palette — dark mode. Slightly brighter hues
+   * for legibility on the dark panel; backgrounds use the same
+   * low-alpha pattern as `--accent-soft` so they read as tints, not
+   * blocks of color. `user_preference` falls through to the base
+   * green accent, matching the light theme. */
+  --cat-project-info: #58a6ff;
+  --cat-project-info-soft: rgba(88, 166, 255, 0.16);
+  --cat-decision: #d29922;
+  --cat-decision-soft: rgba(210, 153, 34, 0.16);
+  --cat-general: #8b949e;
+  --cat-general-soft: rgba(139, 148, 158, 0.16);
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.4), 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.5);
+
+  /* highlight.js — github-dark palette. */
+  --hljs-bg: #161b22;
+  --hljs-comment: #8b949e;
+  --hljs-keyword: #ff7b72;
+  --hljs-string: #a5d6ff;
+  --hljs-number: #79c0ff;
+  --hljs-function: #d2a8ff;
+  --hljs-class: #ffa657;
+  --hljs-variable: #e6edf3;
+  --hljs-title: #d2a8ff;
+  --hljs-attr: #79c0ff;
+  --hljs-built-in: #79c0ff;
+  --hljs-meta: #8b949e;
+  --hljs-tag: #7ee787;
+  --hljs-line-number: #6e7681;
+  --hljs-line-border: #30363d;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #app {
+  height: 100%;
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+/* #app 是 header / .app-layout 的纵向 flex 容器。
+   header 是固定高度，下方 .app-layout 自动填满剩余高度。 */
+#app {
+  display: flex;
+  flex-direction: column;
+}
+
+button {
+  font-family: inherit;
+  font-size: inherit;
+  cursor: pointer;
+}
+
+/* ----- Header ----- */
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 24px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+}
+.app-header .logo {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+}
+.app-header .brand {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  line-height: 1.2;
+}
+.app-header .subtitle {
+  font-size: 12px;
+  color: var(--text-dim);
+  font-weight: 400;
+}
+.app-header .brand-link {
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 500;
+  border-bottom: 1px dashed transparent;
+  transition: border-color .15s, color .15s;
+}
+.app-header .brand-link:hover,
+.app-header .brand-link:focus-visible {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  outline: none;
+}
+.app-header .meta {
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.app-header .meta.error { color: var(--error); }
+
+/* ----- Layout ----- */
+/* 整页布局：header 不动 → 下方是 3 列布局（memory / center / workspace）。
+   memory 与 workspace 顶天立地，center 由 banner / showcase / chat 三段
+   纵向堆叠组成，chat 占据剩余高度。 */
+.app-layout {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.layout-left,
+.layout-right {
+  flex: 0 0 auto;       /* 宽度由内联 style 或 resizer 决定 */
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* 中间列：banner → showcase → chat 自上而下堆叠 */
+.layout-center {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+.layout-center-banner {
+  /* wrapper 透明 + 无 padding：让里面的绿色 .init-button 直接成为这一行的背景。
+     border-bottom 仍然保留，作为与下方 .card-rail 的分隔线。 */
+  flex: 0 0 auto;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border-bottom: 1px solid var(--border);
+}
+.layout-center-banner .init-button {
+  /* 让绿色按钮真正贴满中间列左右边缘，不再有 1400px 上限和居中留白 */
+  max-width: none;
+  margin: 0;
+  width: 100%;
+}
+.layout-center-banner .init-button-header {
+  /* 大按钮铺满整个 banner 区，去掉圆角让它真正"贴满背景"而不是悬浮的 pill */
+  border-radius: 0;
+}
+.layout-center-banner .init-button-loading,
+.layout-center-banner .init-button-error {
+  /* loading/error 占位条跟完成态按钮保持同一种矩形外观 */
+  border-radius: 0;
+}
+.layout-center-banner .init-button-body {
+  /* 展开后的内容容器也跟着大按钮一起去圆角，保持整体矩形感 */
+  border-radius: 0;
+}
+
+.layout-center-chat {
+  flex: 1 1 0;          /* 占据中间列全部高度（init banner + chat + pill + input 自上而下堆叠） */
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Drag handle between chat and tree. The visible line is 2px wide
+ * (a thin column down the middle of the 6px hit zone) so the user
+ * gets a clear target without giving the divider too much presence. */
+.resizer {
+  flex: 0 0 6px;
+  background: transparent;
+  cursor: col-resize;
+  position: relative;
+  user-select: none;
+  touch-action: none;  /* don't let touch drags start a page scroll */
+}
+.resizer::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 2px;
+  right: 2px;
+  background: var(--border);
+  transition: background 0.15s;
+}
+.resizer:hover::before,
+.resizer:active::before { background: var(--accent); }
+
+/* (历史样式 .card-rail / .rail-* / .layout-center-rail 已废弃。
+   能力条已搬进 ChatPanel 内部, 用 ShowcaseGallery scoped 样式。) */
+
+/* ----- Card (full & compact) ----- */
+.card {
+  display: block;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  text-align: left;
+  color: var(--text);
+  transition: border-color .15s, transform .15s, box-shadow .15s;
+  box-shadow: var(--shadow);
+}
+.card:hover {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-hover);
+}
+.card .icon {
+  font-size: 28px;
+  margin-bottom: 10px;
+  line-height: 1;
+}
+.card .title {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 6px;
+  color: var(--text);
+}
+.card .desc {
+  color: var(--text-dim);
+  font-size: 13px;
+  margin-bottom: 14px;
+  min-height: 38px;
+}
+.card .tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.card .tag {
+  background: var(--panel-2);
+  color: var(--tool);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+}
+
+/* Compact variant — horizontal pill used in the rail.
+ * Title wraps to up to 2 lines (long titles like "写 README / 整理资料"
+ * would otherwise get ellipsis-truncated in 180px). `line-clamp`
+ * keeps the wrap bounded so a freakishly long title doesn't blow out
+ * the card height; the `title` attribute on the button still surfaces
+ * the full text on hover. */
+.card.compact {
+  flex-shrink: 0;
+  width: 200px;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  box-shadow: none;
+}
+.card.compact:hover { transform: translateY(-1px); }
+.card.compact .icon { font-size: 22px; margin: 0; flex-shrink: 0; }
+.card.compact .title {
+  font-size: 13px;
+  margin: 0;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ----- Chat panel (full page, not overlay) ----- */
+.chat-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  min-width: 0;
+  /* `.chat-panel` is a NON-scrolling flex column: an inner `.chat-scroll`
+     region takes all the scrolling, and the `.chat-input` footer is a plain
+     flex child that therefore stays pinned to the bottom no matter how tall
+     the conversation gets. */
+  overflow: hidden;
+  min-height: 0;
+}
+/* THE scroll container. `panelEl`/scrollToBottom target this element.
+   Holds the sticky context-window bar (top) + all turns. */
+.chat-scroll {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
+  scroll-behavior: smooth;
+  /* Extra room at the bottom so the last card doesn't sit flush against
+   * the input footer. The .chat-messages padding-bottom covers the
+   * scrolled-to-end case; this covers the short-chat case where the
+   * content doesn't fill the scroll area. */
+  padding-bottom: 32px;
+}
+.chat-scroll::-webkit-scrollbar { width: 8px; }
+.chat-scroll::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+.chat-scroll::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
+.chat-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 24px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+}
+.chat-header .back {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 6px 12px;
+  border-radius: 6px;
+  transition: border-color .15s;
+}
+.chat-header .back:hover { border-color: var(--accent); }
+.chat-header .title { font-weight: 600; color: var(--text); }
+
+/* `.chat-messages` is now a regular flex column — no scrolling, no
+   scrollbar styling. The 24px padding stays so the turn content has
+   breathing room; the sticky context-window bar is OUTSIDE this element
+   and flush with the chat-panel walls. */
+.chat-messages {
+  flex: 1 1 0;
+  min-height: 0;
+  /* 上小下大：第一个方块贴近上边缘，最后一个卡片（TurnSummaryCard
+     调用量小结）与下方输入框之间留够呼吸空间，展开后还能继续往下
+     滚，把展开后的图表完整看到。 */
+  padding: 12px 24px 400px;
+  display: flex;
+  flex-direction: column;
+  /* Gap between turns — this is the space that sits directly above each
+     user bubble (the first child of every `.turn`). Kept tight so a user
+     message hugs the preceding turn a bit more closely. */
+  gap: 8px;
+}
+
+/* ----- Context-window indicator -----
+   Now a direct flex child of `.chat-panel`, placed ABOVE `.chat-scroll`
+   so it sits as a fixed strip right under the "试试这些能力" 能力卡片栏
+   — no longer inside the scrolling conversation, so no sticky / no
+   scrollbar-gutter compensation is needed.
+
+   Three visual states — see `<ChatPanel>` for trigger logic:
+     - .idle     : default, neutral accent
+     - .over     : context overflowed, persistent red pulse
+     - .compress : green flash for 1.6s after a summary event */
+.ctx-window {
+  flex-shrink: 0;
+  background: var(--panel);
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  padding: 6px 12px;
+  margin: 0;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-dim);
+  transition: border-color 200ms ease, background 200ms ease;
+}
+.ctx-window-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.ctx-window-icon { font-size: 12px; flex-shrink: 0; }
+.ctx-window-label {
+  color: var(--text);
+  font-weight: 600;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+.ctx-window-bar {
+  flex: 1 1 0;
+  min-width: 60px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--panel-2);
+  overflow: hidden;
+  position: relative;
+}
+.ctx-window-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 3px;
+  transition: width 350ms ease-out, background 200ms ease;
+}
+.ctx-window-num {
+  font-weight: 600;
+  color: var(--text);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+.ctx-window-pct {
+  color: var(--text-dim);
+  font-size: 10px;
+  min-width: 32px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+.ctx-window-tag {
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  letter-spacing: 0.03em;
+  flex-shrink: 0;
+}
+
+/* ----- Over-threshold state ----- */
+.ctx-window.over {
+  /* Only the bottom border exists (see base rule), so it carries the
+     error-color signal. Background tints slightly red. */
+  border-bottom-color: var(--error, #ef4444);
+  background: color-mix(in srgb, var(--error, #ef4444) 8%, var(--panel));
+}
+.ctx-window.over .ctx-window-fill { background: var(--error, #ef4444); }
+.ctx-window.over .ctx-window-num { color: var(--error, #ef4444); }
+.ctx-window-tag.over {
+  background: var(--error, #ef4444);
+  color: #fff;
+  /* Persistent diagonal pulse — makes overflow visually loud so the user
+     notices the context is dangerously full. */
+  animation: ctx-over-pulse 1.8s ease-in-out infinite;
+}
+@keyframes ctx-over-pulse {
+  0%, 100% { opacity: 0.7; }
+  50%      { opacity: 1.0; }
+}
+
+/* ----- Compression-flash state (1.6s) -----
+   Wins over `.over` so a successful compression drops us back to green
+   even if the new value still sits near the threshold. The flash uses
+   a green border-bottom + glow + brighter bar fill, then fades back to
+   idle when the JS-side timer clears `flashState`. */
+.ctx-window.compress {
+  border-bottom-color: #22c55e;
+  background: color-mix(in srgb, #22c55e 10%, var(--panel));
+  box-shadow:
+    0 0 0 3px rgba(34, 197, 94, 0.18),
+    0 4px 12px rgba(34, 197, 94, 0.18);
+}
+.ctx-window.compress .ctx-window-fill { background: #22c55e; }
+.ctx-window.compress .ctx-window-num { color: #15803d; }
+.ctx-window-tag.compress {
+  background: #22c55e;
+  color: #fff;
+  /* One-shot celebratory flash; JS clears the class after 1.6s. */
+  animation: ctx-compress-flash 1.6s ease-out 1;
+}
+@keyframes ctx-compress-flash {
+  0%   { transform: scale(1.0); opacity: 1; }
+  20%  { transform: scale(1.12); opacity: 1; }
+  100% { transform: scale(1.0); opacity: 1; }
+}
+
+/* ----- Turn (one user→assistant exchange) ----- */
+.turn {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* ----- Step card (collapsible) ----- */
+.step-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  /* Subtle elevation: a soft shadow under the card, plus a slightly
+   * darker shadow on hover so the user feels the card "lift" when
+   * they focus on a step. Keeps the chrome minimal but the page
+   * no longer feels flat. */
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04),
+              0 2px 8px rgba(15, 23, 42, 0.03);
+  transition: border-color .15s, box-shadow .15s;
+  max-width: 800px;
+  align-self: stretch;
+}
+.step-card:hover {
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05),
+              0 4px 16px rgba(15, 23, 42, 0.06);
+}
+.step-card.collapsed .step-body { display: none; }
+.step-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 14px;
+  background: transparent;
+  border: 0;
+  text-align: left;
+  color: var(--text);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+}
+.step-header:hover { background: var(--panel-2); }
+.step-header .chevron {
+  color: var(--text-dim);
+  font-size: 10px;
+  width: 12px;
+  display: inline-block;
+}
+.step-header .step-num {
+  font-weight: 600;
+  font-family: var(--font-mono);
+}
+.step-header .step-summary { flex: 1; }
+/* Compact "how many tools" badge on the step header. The tool
+ * identity is shown in each tool card's Arguments title below, so
+ * this stays a one-token glance marker. */
+.step-header .tool-count {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-dim);
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  padding: 1px 8px;
+  border-radius: 10px;
+  white-space: nowrap;
+}
+.step-header .step-elapsed {
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.badge {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--text-dim);
+}
+.badge.tools { color: var(--tool); border-color: var(--tool); background: #fff8e6; }
+.badge.done { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+.badge.pending { color: var(--text-dim); }
+
+.step-body {
+  padding: 0 14px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border-top: 1px solid var(--border);
+}
+
+/* ----- Thinking placeholder (pre-step-1 placeholder card) ----- */
+.thinking-card {
+  /* Same shape as a real step-card so the swap-in feels natural. */
+  border-style: dashed;
+  border-color: var(--accent);
+  background: linear-gradient(180deg, var(--accent-soft) 0%, var(--panel) 60%);
+}
+.thinking-header {
+  cursor: default;  /* not collapsible */
+  background: transparent;
+}
+.thinking-header:hover {
+  background: transparent;
+}
+.thinking-phase {
+  flex: 1;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 500;
+  /* Avoid layout jump when phase label length varies slightly */
+  font-variant-numeric: tabular-nums;
+}
+
+.pulse-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  margin-right: 2px;
+  animation: pulse-dot 1.2s ease-in-out infinite;
+  box-shadow: 0 0 0 0 rgba(0, 168, 107, 0.4);
+}
+@keyframes pulse-dot {
+  0%, 100% { transform: scale(1);   box-shadow: 0 0 0 0   rgba(0, 168, 107, 0.45); }
+  50%      { transform: scale(1.3); box-shadow: 0 0 0 6px rgba(0, 168, 107, 0);    }
+}
+
+.thinking-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 12px;
+}
+.shimmer-row {
+  height: 12px;
+  border-radius: 4px;
+  background: linear-gradient(
+    90deg,
+    var(--panel-2) 0%,
+    var(--border) 50%,
+    var(--panel-2) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.6s ease-in-out infinite;
+}
+.shimmer-row:nth-child(2) { animation-delay: -0.4s; }
+.shimmer-row:nth-child(3) { animation-delay: -0.8s; }
+.shimmer-row:nth-child(4) { animation-delay: -1.2s; }
+@keyframes shimmer {
+  0%   { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+
+/* ----- Step sections (thinking / assistant / tool card) -----
+ * Three visually distinct blocks under each step header, all using
+ * the same .tool-section-title pattern for their labels so the eye
+ * can scan for "what is this":
+ *   - Thinking:   gray bg, purple-ish text, monospace
+ *   - Assistant:  white bg, accent left border, regular markdown
+ *   - Tool card:  bordered card, contains Arguments + Result
+ */
+.step-section {
+  font-size: 13px;
+  border-radius: 8px;
+  margin-bottom: 12px;
+  overflow: hidden;
+}
+
+/* Thinking: collapse-capable <details>, dimmed to read as
+ * "internal reasoning". The <summary> is styled as a section title
+ * matching the others. */
+.step-section.thinking {
+  background: var(--panel-2);
+  border-left: 3px solid #c4b5fd;
+}
+.step-section.thinking > .step-section-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-dim);
+  padding: 10px 12px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+.step-section.thinking > .step-section-summary::-webkit-details-marker { display: none; }
+.step-section.thinking > .step-section-summary::before {
+  content: '▼';
+  font-size: 9px;
+  color: var(--text-dim);
+  margin-right: 2px;
+  flex-shrink: 0;
+}
+.step-section.thinking:not([open]) > .step-section-summary::before { content: '▶'; }
+.step-section.thinking > .step-section-body {
+  padding: 0 12px 12px 12px;
+}
+.step-section.thinking .thinking-text {
+  margin: 0;
+  padding: 10px 12px;
+  background: #faf7ff;
+  border: 1px solid #e9e3f5;
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: #5b21b6;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+/* Assistant: the model's text reply. No border, no title underline —
+ * the 🤖 icon + "Assistant:" label sits directly above the body
+ * content with minimal separation, so the whole block reads as one
+ * unit ("the model said this") rather than a labeled sub-section. */
+.step-section.assistant {
+  background: var(--bg);
+  border: 0;
+  border-radius: var(--radius);
+  margin-top: 12px;
+  margin-bottom: 0;
+  padding: 2px 14px 10px 14px;
+}
+.step-section.assistant > .tool-section-title {
+  /* No border, no separator. Tighter padding/margin so the title
+   * hugs the body content immediately below. */
+  border-bottom: 0;
+  padding-top: 4px;
+  padding-bottom: 2px;
+  margin-bottom: 4px;
+}
+.step-section.assistant > .step-section-body {
+  padding: 0;
+  line-height: 1.65;
+}
+
+/* ----- Tool call card ----- */
+.tool-card {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-2);
+  overflow: hidden;
+  /* Soft inner shadow on the body so the tool card sits "inside" the
+   * step card it's nested in, instead of looking like two boxes
+   * stacked on top of each other. */
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+.tool-card.error { border-color: var(--error); background: var(--error-bg); }
+.tool-card.pending { border-style: dashed; border-color: var(--accent); }
+
+/* Each section block (Arguments / Result) inside the card carries
+ * its own padding and is separated by a hairline divider. */
+.tool-card > :not(:last-child) {
+  border-bottom: 1px solid var(--border);
+}
+.tool-card.error > :not(:last-child) { border-bottom-color: #fecaca; }
+.tool-card > .tool-section {
+  padding: 12px 14px;
+  background: var(--panel);
+}
+.tool-card.error > .tool-section { background: #fff5f5; }
+
+/* Section title row: icon + label, with a hairline underneath. Used
+ * by Arguments, Result, and Assistant so the eye picks up the
+ * pattern. */
+.tool-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  padding-bottom: 8px;
+  margin-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.tool-section-icon {
+  font-size: 14px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+}
+/* State-specific icon colors so the eye picks up success/error before
+ * reading the body. */
+.tool-section-title.is-pending .tool-section-icon { color: var(--text-dim); }
+.tool-section-title.is-error {
+  color: var(--error);
+}
+.tool-section-title.is-error .tool-section-icon { color: var(--error); }
+/* When the title carries the tool identity (Arguments section in a
+ * tool card), the tool name is the primary marker. */
+.tool-section-title .tool-section-name {
+  font-family: var(--font-mono);
+}
+
+/* Cap the body of Arguments / Result / Assistant blocks so a single
+ * huge tool call doesn't push the rest of the step off-screen. The
+ * chat panel itself still scrolls, but a per-section cap keeps each
+ * block scannable when comparing multiple tool calls. */
+.tool-section-body,
+.step-section-body {
+  min-width: 0;
+  max-height: 400px;
+  overflow-y: auto;
+}
+.tool-section-body > :first-child,
+.step-section-body > :first-child { margin-top: 0; }
+.tool-section-body > :last-child,
+.step-section-body > :last-child  { margin-bottom: 0; }
+
+/* (Dead .result-text rule removed — both result paths now use
+ * .v-pre, so the same .tool-section-body > .v-pre rule from
+ * ToolArgs.vue applies.) */
+.tool-section-body .result-pending {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+/* Tool-result text is usually long raw output (file contents, logs).
+ * Drop it slightly below the standard .v-pre size (Arguments body
+ * stays at 11px) so multi-line results don't visually outweigh the
+ * more structured Arguments block above them within the same card. */
+.v-pre.result-pre {
+  font-size: 10.5px;
+}
+
+/* Tool-name tag chip — color-coded per tool family. Used in the step
+ * header (one chip per tool call). */
+.tool-tag {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 10px;
+  border-radius: 10px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+.tool-tag-icon { font-family: var(--font-sans); font-size: 12px; line-height: 1; }
+.tool-tag-name { font-family: var(--font-mono); }
+/* The `*N` suffix on a chip when the same tool was called multiple
+ * times in one step. Slightly dimmer than the name so the eye reads
+ * "bash, 3 of them" rather than "bash*3" as a single token. */
+.tool-tag-count {
+  font-family: var(--font-mono);
+  font-weight: 400;
+  opacity: 0.7;
+  margin-left: 1px;
+}
+.tool-tag.tag-bash {
+  color: #b45309;
+  border-color: #fcd34d;
+  background: #fffbeb;
+}
+.tool-tag.tag-skill {
+  color: #1e40af;
+  border-color: #93c5fd;
+  background: #eff6ff;
+}
+
+/* ----- Step header "in-flight" state -----
+ * While a step is open on the backend (no step_end yet), the header gets a
+ * pulsing dot + accent border to read as "still working". */
+.step-header.in-flight {
+  background: linear-gradient(
+    90deg,
+    var(--accent-soft) 0%,
+    transparent 60%
+  );
+}
+.step-header .step-elapsed.ticking {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* Empty state (no messages yet) */
+.empty-state {
+  margin: auto;
+  text-align: center;
+  color: var(--text-dim);
+  padding: 60px 20px;
+}
+.empty-state .empty-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+}
+.empty-state .empty-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+.empty-state .empty-sub {
+  font-size: 13px;
+  line-height: 1.7;
+}
+.msg {
+  max-width: 800px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  box-shadow: var(--shadow);
+}
+.msg.user {
+  background: var(--assistant-soft);
+  border: 1px solid var(--assistant);
+  align-self: flex-end;
+  color: var(--text);
+}
+.msg.assistant {
+  background: var(--accent-soft);
+  border: 1px solid var(--accent);
+  align-self: flex-start;
+  color: var(--text);
+  max-width: 800px;
+}
+.msg.error {
+  background: var(--error-bg);
+  border: 1px solid var(--error);
+  color: #7f1d1d;
+}
+.msg-role {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.chat-input {
+  /* Plain footer: a non-scrolling flex child of `.chat-panel` (the scroll
+     lives in the sibling `.chat-scroll`), so it always sits at the bottom
+     edge — no `position: sticky` needed. Pairs with the sticky
+     context-window bar at the top to frame the scrolling turns. */
+  flex: 0 0 auto;
+  z-index: 5;
+  border-top: 1px solid var(--border);
+  padding: 10px 24px;
+  display: flex;
+  gap: 12px;
+  background: var(--panel);
+  align-items: flex-end;
+}
+.chat-input textarea {
+  flex: 1;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-family: inherit;
+  font-size: 14px;
+  resize: none;
+  min-height: 36px;
+  max-height: 120px;
+  outline: none;
+  transition: border-color .15s;
+}
+.chat-input textarea:focus { border-color: var(--accent); }
+.chat-input button {
+  background: var(--accent);
+  color: #ffffff;
+  border: none;
+  font-weight: 600;
+  padding: 0 22px;
+  height: 36px;
+  border-radius: 8px;
+  transition: opacity .15s;
+}
+.chat-input button:hover:not(:disabled) { opacity: 0.9; }
+.chat-input button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+/* Secondary button — used for destructive but non-primary actions like
+   "clear conversation". Neutral surface so it doesn't compete with the
+   primary send button. Keeps the same height/radius as `.chat-input button`
+   so the row stays aligned. */
+.chat-input .clear-btn {
+  background: transparent;
+  color: var(--text-muted, #888);
+  border: 1px solid var(--border);
+  font-weight: 500;
+}
+.chat-input .clear-btn:hover:not(:disabled) {
+  background: var(--panel-2);
+  color: var(--text);
+  opacity: 1;
+}
+.chat-input .hint {
+  color: var(--text-dim);
+  font-size: 11px;
+  align-self: center;
+  margin-left: 4px;
+}
+/* ----- Workspace tree (right sidebar) ----- */
+.workspace-tree {
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  /* The resizer (between chat and tree) provides the visual divider,
+   * so the tree itself no longer carries a border-left. */
+  min-height: 0;
+}
+.tree-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.tree-title {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tree-header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.tree-refresh,
+.tree-collapse {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-dim);
+  font-size: 14px;
+  line-height: 1;
+  transition: background .15s, color .15s, border-color .15s;
+}
+.tree-refresh:hover:not(:disabled),
+.tree-collapse:hover:not(:disabled) {
+  background: var(--panel-2);
+  color: var(--text);
+  border-color: var(--text-dim);
+}
+.tree-refresh:disabled { cursor: not-allowed; opacity: 0.6; }
+.tree-refresh.spinning { animation: spin 0.9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ----- Collapsed strip (full-height button, the whole column is the target) ----- */
+.workspace-tree.workspace-tree-collapsed {
+  border-left: 1px solid var(--border);
+  padding: 0;
+  /* The button is the only child and fills the strip; no extra layout
+   * here. Just keep the visual border as a divider from chat. */
+}
+.tree-collapsed-trigger {
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  border: none;
+  padding: 14px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  cursor: pointer;
+  color: var(--text-dim);
+  font: inherit;
+  transition: background .15s, color .15s;
+}
+.tree-collapsed-trigger:hover,
+.tree-collapsed-trigger:focus-visible {
+  background: var(--panel-2);
+  color: var(--text);
+  outline: none;
+}
+.tree-collapsed-icon {
+  font-size: 13px;
+  line-height: 1;
+}
+.tree-collapsed-label {
+  /* "Workspace" rotated 90° so it reads bottom-up along the strip —
+     a visual anchor when the header is hidden. */
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  user-select: none;
+}
+
+.tree-status {
+  padding: 16px;
+  color: var(--text-dim);
+  font-size: 13px;
+  text-align: center;
+}
+.tree-status.error { color: var(--error); }
+
+.tree-list {
+  list-style: none;
+  margin: 0;
+  padding: 6px 0;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+.tree-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px 4px 0;
+  font-size: 13px;
+  line-height: 1.4;
+  border-radius: 4px;
+  margin: 0 6px;
+  user-select: none;
+}
+.tree-item:hover { background: var(--panel-2); }
+.tree-toggle {
+  background: transparent;
+  border: none;
+  padding: 0;
+  width: 16px;
+  height: 16px;
+  color: var(--text-dim);
+  font-size: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.tree-toggle:hover { color: var(--text); }
+.tree-toggle-spacer { display: inline-block; width: 16px; flex-shrink: 0; }
+.tree-icon { flex-shrink: 0; font-size: 14px; line-height: 1; }
+.tree-name {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+  color: var(--text);
+  cursor: pointer;
+}
+.tree-name-dir {
+  font-weight: 500;
+  cursor: pointer;
+}
+.tree-name-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.tree-size {
+  color: var(--text-dim);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+/* ----- File preview modal ----- */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 32px;
+}
+.modal-container {
+  background: var(--panel);
+  border-radius: 12px;
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.18);
+  width: 100%;
+  max-width: 920px;
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.modal-title {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+.modal-title-main {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+.modal-path {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  word-break: break-all;
+  line-height: 1.35;
+}
+.modal-name {
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.modal-kind-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--panel-2);
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+}
+.modal-kind-badge.kind-text     { background: #e0f2fe; color: #075985; }
+.modal-kind-badge.kind-markdown { background: #dcfce7; color: #166534; }
+.modal-kind-badge.kind-json     { background: #fef9c3; color: #854d0e; }
+.modal-kind-badge.kind-csv      { background: #cffafe; color: #155e75; }
+.modal-kind-badge.kind-code     { background: #ede9fe; color: #5b21b6; }
+.modal-kind-badge.kind-html     { background: #fef3c7; color: #92400e; }
+.modal-kind-badge.kind-image    { background: #fce7f3; color: #9d174d; }
+.modal-kind-badge.kind-pdf      { background: #fee2e2; color: #991b1b; }
+.modal-kind-badge.kind-binary   { background: var(--panel-2); color: var(--text-dim); }
+.modal-size {
+  color: var(--text-dim);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+.modal-close {
+  background: transparent;
+  border: none;
+  font-size: 24px;
+  line-height: 1;
+  color: var(--text-dim);
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background .15s, color .15s;
+}
+.modal-close:hover { background: var(--panel-2); color: var(--text); }
+
+.modal-body {
+  flex: 1;
+  overflow: auto;
+  background: var(--bg);
+  position: relative;
+  min-height: 0;
+}
+.modal-text {
+  margin: 0;
+  padding: 18px 20px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.modal-text code { font-family: inherit; }
+/* Markdown body — same padding as .modal-text but allows
+ * block-level elements (h1, ul, p…) to flow naturally. */
+.modal-markdown {
+  padding: 18px 20px;
+  color: var(--text);
+  line-height: 1.65;
+}
+
+/* CSV table — the whole table scrolls horizontally + vertically so
+ * a wide 1200-row sales sheet fits the modal. Sticky <thead> keeps
+ * the column labels visible while scrolling. Monospace so values
+ * line up visually. */
+.modal-csv {
+  overflow: auto;
+  max-height: 100%;
+  background: var(--panel);
+}
+.modal-csv-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  width: 100%;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text);
+}
+.modal-csv-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--panel-2);
+  border-bottom: 1px solid var(--border);
+  padding: 8px 12px;
+  text-align: left;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--text);
+}
+.modal-csv-table tbody td {
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  max-width: 360px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.modal-csv-table tbody tr:nth-child(even) td {
+  background: var(--bg);
+}
+.modal-csv-table tbody tr:hover td {
+  background: var(--accent-soft);
+}
+/* ----- JSONL ----- */
+/* One row per record. Each row stacks a slim meta strip (line#
+ * + type chip) on top of a pretty-printed JSON block, mirroring
+ * how .modal-text / .modal-csv-table present per-cell content.
+ * Bad/empty/typo'd lines are tinted to make the silent-drop
+ * cases (the kind that produce "I added an entity but the graph
+ * doesn't show it" debugging sessions) obvious at a glance. */
+.modal-jsonl {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+}
+.modal-jsonl-empty {
+  padding: 24px;
+  color: var(--text-dim);
+  text-align: center;
+  font-style: italic;
+}
+.modal-jsonl-row {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-1);
+  overflow: hidden;
+}
+.modal-jsonl-row-entity {
+  border-left: 3px solid #4a90e2;
+}
+.modal-jsonl-row-relation {
+  border-left: 3px solid #7ed321;
+}
+.modal-jsonl-row-err {
+  border-color: #d9534f;
+  background: rgba(217, 83, 79, 0.06);
+}
+.modal-jsonl-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+}
+.modal-jsonl-line {
+  color: var(--text-dim);
+  font-weight: 600;
+  min-width: 36px;
+}
+.modal-jsonl-type {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.modal-jsonl-type-entity {
+  background: rgba(74, 144, 226, 0.18);
+  color: #2a5fa8;
+}
+.modal-jsonl-type-relation {
+  background: rgba(126, 211, 33, 0.18);
+  color: #4f7a1c;
+}
+.modal-jsonl-type-unknown {
+  background: rgba(150, 150, 150, 0.18);
+  color: var(--text-dim);
+}
+.modal-jsonl-type-error {
+  background: rgba(217, 83, 79, 0.18);
+  color: #a8322b;
+}
+.modal-jsonl-data {
+  margin: 0;
+  padding: 10px 14px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text);
+  white-space: pre;
+  overflow-x: auto;
+}
+.modal-jsonl-data code { font-family: inherit; }
+.modal-jsonl-err-block {
+  padding: 8px 14px 12px;
+}
+.modal-jsonl-err-msg {
+  font-size: 11.5px;
+  color: #a8322b;
+  margin-bottom: 6px;
+}
+.modal-html, .modal-pdf {
+  width: 100%;
+  height: 100%;
+  min-height: 480px;
+  border: 0;
+  background: #ffffff;
+}
+.modal-image-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  min-height: 320px;
+}
+.modal-image {
+  max-width: 100%;
+  max-height: 70vh;
+  object-fit: contain;
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+.modal-binary {
+  padding: 32px;
+  text-align: center;
+  color: var(--text-dim);
+}
+.modal-binary p { margin: 0 0 12px; }
+.modal-binary p:last-child { margin-bottom: 0; }
+/* Hint shown below the error message when the load failed because
+ * the file doesn't exist. Smaller and dimmer so it doesn't compete
+ * with the primary error text. */
+.modal-binary-hint {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.modal-binary-hint code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  background: var(--panel-2);
+  padding: 1px 5px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+.modal-download {
+  display: inline-block;
+  background: var(--accent);
+  color: #ffffff;
+  text-decoration: none;
+  padding: 8px 18px;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 13px;
+  transition: opacity .15s;
+}
+.modal-download:hover { opacity: 0.9; }
+.modal-truncated {
+  padding: 10px 18px;
+  background: #fef3c7;
+  color: #92400e;
+  font-size: 12px;
+  border-top: 1px solid #fde68a;
+  flex-shrink: 0;
+}
+
+/* Vue Transition for the modal — fade + slight scale. */
+.modal-enter-active, .modal-leave-active { transition: opacity .18s; }
+.modal-enter-active .modal-container, .modal-leave-active .modal-container {
+  transition: transform .18s, opacity .18s;
+}
+.modal-enter-from, .modal-leave-to { opacity: 0; }
+.modal-enter-from .modal-container, .modal-leave-to .modal-container {
+  transform: scale(0.96);
+  opacity: 0;
+}
+
+/* ----- highlight.js token colors (light + dark via CSS variables) -----
+ * Maps highlight.js's standard class names to our CSS variables so
+ * `data-theme` on <html> re-skins every highlighted block in one go.
+ * Colors come from the github-light and github-dark palettes,
+ * extracted so we don't need to ship highlight.js's theme stylesheets. */
+.hljs { color: var(--hljs-variable); background: var(--hljs-bg); }
+.hljs-comment, .hljs-quote { color: var(--hljs-comment); font-style: italic; }
+.hljs-keyword, .hljs-selector-tag, .hljs-literal, .hljs-section, .hljs-link {
+  color: var(--hljs-keyword); font-weight: 600;
+}
+.hljs-function .hljs-keyword { color: var(--hljs-keyword); font-weight: 400; }
+.hljs-subst { color: var(--hljs-variable); font-weight: 600; }
+.hljs-string, .hljs-attr, .hljs-meta-string { color: var(--hljs-string); }
+.hljs-number, .hljs-symbol, .hljs-bullet { color: var(--hljs-number); }
+.hljs-title, .hljs-name, .hljs-attribute, .hljs-built_in, .hljs-class,
+.hljs-params {
+  color: var(--hljs-title);
+}
+.hljs-type, .hljs-tag { color: var(--hljs-tag); }
+.hljs-meta { color: var(--hljs-meta); }
+.hljs-deletion { background: #ffeef0; }
+.hljs-addition { background: #f0fff4; }
+:root[data-theme="dark"] .hljs-deletion { background: #67060c; }
+:root[data-theme="dark"] .hljs-addition { background: #033a16; }
+
+/* ----- File-preview code block with line numbers (GitHub-style) -----
+ * Uses CSS counter to render the line gutter, so the highlighted
+ * HTML itself stays clean (no per-line wrapper noise) and the
+ * counter is correct even if the source has been post-processed. */
+.code-with-lines {
+  counter-reset: line;
+  padding: 14px 0;
+  background: var(--hljs-bg);
+}
+.code-with-lines .hljs-line {
+  display: block;
+  padding: 0 18px 0 3.6em;
+  min-height: 1.55em;
+  position: relative;
+  white-space: pre;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+.code-with-lines .hljs-line::before {
+  counter-increment: line;
+  content: counter(line);
+  position: absolute;
+  left: 0;
+  width: 2.8em;
+  text-align: right;
+  padding-right: 0.8em;
+  color: var(--hljs-line-number);
+  border-right: 1px solid var(--hljs-line-border);
+  user-select: none;
+}
+/* Empty source line still shows a row with just the line number so
+ * the gutter doesn't have gaps. */
+.code-with-lines .hljs-line:empty::before {
+  content: counter(line);
+}
+
+/* ----- Theme toggle button ----- */
+.theme-toggle {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--text-dim);
+  font-size: 15px;
+  line-height: 1;
+  padding: 0;
+  transition: background .15s, color .15s, border-color .15s;
+}
+.theme-toggle:hover {
+  background: var(--panel-2);
+  color: var(--text);
+  border-color: var(--text-dim);
+}
+
+/* Smooth palette transition when the user clicks the toggle. */
+:root {
+  --theme-transition-duration: 200ms;
+}
+html {
+  transition: background-color var(--theme-transition-duration) ease,
+              color var(--theme-transition-duration) ease;
+}
+
+/* ----- Memory panel (left side, two stacked sections) -----
+ * Split 50/50 by default (flex: 1 1 0 on each .memory-section). The
+ * panel itself sits in the app-main flex row as a fixed-width column;
+ * chat + workspace tree get the remaining space as before. */
+.memory-panel {
+  display: flex;
+  flex-direction: column;
+  /* Width is set inline by App.vue (driven by the resizer). Default
+   * is 280px via the inline style on first paint; the resizer lets
+   * the user drag it anywhere from 200px to 480px. */
+  flex: 0 0 auto;
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  min-height: 0;
+}
+/* ----- Collapsed strip (full-height button, the whole column is the target) -----
+ * Mirrors .workspace-tree-collapsed on the right side. The panel
+ * becomes a 32px-wide column whose only child is the expand button;
+ * all memory data stays in memory so expanding is instant. */
+.memory-panel.memory-panel-collapsed {
+  border-right: 1px solid var(--border);
+  padding: 0;
+}
+.memory-collapsed-trigger {
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  border: none;
+  padding: 14px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  cursor: pointer;
+  color: var(--text-dim);
+  font: inherit;
+  transition: background .15s, color .15s;
+}
+.memory-collapsed-trigger:hover,
+.memory-collapsed-trigger:focus-visible {
+  background: var(--panel-2);
+  color: var(--text);
+  outline: none;
+}
+.memory-collapsed-icon {
+  font-size: 13px;
+  line-height: 1;
+}
+.memory-collapsed-label {
+  /* "Memory" rotated 90° so it reads top-to-bottom along the LEFT
+     strip — a visual anchor when the headers are hidden. Unlike the
+     right-side workspace tree (which rotates 180° so the head-tilt
+     matches the rightward lean), this panel sits on the left edge,
+     so we keep the natural vertical-rl direction. The user tilts
+     their head left to read, mirroring the panel's position. */
+  writing-mode: vertical-rl;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  user-select: none;
+}
+.memory-section {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  /* Smooth collapse animation when the long-term section toggles
+   * between flex: 1 1 0 and flex: 0 0 auto. */
+  transition: flex 0.2s ease;
+}
+/* Short-term section grows to fill available height so the messages
+ * scroll within it; long-term sections (笔记 / 图谱) take only their
+ * content height and naturally anchor at the bottom of the panel.
+ *
+ * Pre-fix this rule used `flex: 1 1 0` on every .memory-section — that
+ * was correct when there were only two sections (短 + 长, 50/50 split),
+ * but with three sections (短 + 长笔记 + 长图谱) the 1/3 split meant
+ * the long-term headers ended up "floating in the middle" when both
+ * collapsed, because the surviving flex: 1 1 0 still respected the
+ * original 1/3 partition rather than absorbing all remaining space.
+ */
+/* ----- Memory panel section sizing (proportional layout) -----
+ * The user spec defines 4 size states keyed on which long-term
+ * sections are expanded vs collapsed. We express the spec via flex
+ * ratios + `:has()` selectors so the layout reacts to collapsed-state
+ * classes without any JS in the loop.
+ *
+ *   both expanded   →  短 4 : 笔记 3 : 图谱 3     (4:3:3)
+ *   one expanded    →  短 6 : 笔记/图谱 4 : (header) (6:4)
+ *   both collapsed  →  短 fills  +  two headers at the bottom
+ *
+ * Why this is structured as a small state machine:
+ *   - The default rule below (`flex: 3 1 0` on long-term) is the
+ *     4:3:3 starting point.
+ *   - When ANY long-term section is `.collapsed`, the panel uses
+ *     `:has(.collapsed)` to bump short-term to 6 and the surviving
+ *     expanded one to 4 — giving the 6:4 ratio.
+ *   - When BOTH are collapsed, the more-specific `:has(...) :has(...)`
+ *     rule kicks short-term up to `flex: 1 1 0` so it absorbs the
+ *     freed space and the two headers sit at the bottom.
+ *
+ * `:has()` is supported in all modern browsers (Chrome 105+,
+ * Safari 15.4+, Firefox 121+). For older targets this would need
+ * a JS-side computed style on the panel — we don't bother.
+ */
+
+/* Default state: both long-term expanded → 4:3:3 split. */
+.memory-section.short-term {
+  flex: 4 1 0;
+  min-height: 0;
+}
+.memory-section.long-term,
+.memory-section.long-term-graph {
+  flex: 3 1 0;
+  min-height: 0;
+  /* Content overflow scrolls internally instead of pushing layout.
+   *
+   * `.memory-section.long-term-graph` overrides this below — its
+   * header is split from its scroll body via a `.graph-body` div,
+   * so the section itself stays `overflow: hidden` and the scroll
+   * lives entirely inside `.graph-body`. That way the section's
+   * vertical scrollbar appears only in the area *below* the
+   * header, not next to / over it. */
+  overflow-y: auto;
+}
+/* Graph section: header is a flex sibling of `.graph-body`, not a
+ * sticky child. The body becomes the sole scroll container so its
+ * scrollbar lives entirely below the header. */
+.memory-section.long-term-graph {
+  overflow: hidden;
+}
+.graph-body {
+  /* Flex child so it absorbs the section's remaining height
+   * after the (non-shrinking) header. min-height: 0 lets it
+   * actually shrink below its content's intrinsic height so
+   * overflow-y can kick in. */
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  /* Match the wrap's horizontal padding so the content inside
+   * (which has its own padding) aligns with the header above. */
+  padding: 0 12px;
+}
+.memory-section + .memory-section {
+  border-top: 1px solid var(--border);
+}
+
+/* Either long-term is collapsed → short-term bumps to 6, the surviving
+ * expanded one bumps to 4. The two `:has()` rules are independent so
+ * each one targets its own non-collapsed peer. */
+.memory-panel:has(.memory-section.long-term.collapsed) .memory-section.short-term,
+.memory-panel:has(.memory-section.long-term-graph.collapsed) .memory-section.short-term {
+  flex: 6 1 0;
+}
+.memory-panel:has(.memory-section.long-term.collapsed) .memory-section.long-term-graph:not(.collapsed) {
+  flex: 4 1 0;
+}
+.memory-panel:has(.memory-section.long-term-graph.collapsed) .memory-section.long-term:not(.collapsed) {
+  flex: 4 1 0;
+}
+
+/* Both long-term collapsed → short-term fills the freed space, the
+ * two headers anchor at the bottom. `:has() :has()` has higher
+ * specificity than the single `:has()` rule above, so it wins. */
+.memory-panel:has(.memory-section.long-term.collapsed):has(.memory-section.long-term-graph.collapsed)
+  .memory-section.short-term {
+  flex: 1 1 0;
+}
+
+/* Collapsed long-term section: shrink to header height, drop the
+ * max-height / overflow-y so the (now-tiny) section doesn't try to
+ * scroll or claim a fixed cap. */
+.memory-section.long-term.collapsed,
+.memory-section.long-term-graph.collapsed {
+  flex: 0 0 auto;
+  max-height: none;
+  overflow: hidden;
+}
+.memory-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px 8px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  background: var(--panel);
+  /* Sticky to the top of whichever scroll container the section
+   * lives in (.memory-section has overflow-y: auto, so this is
+   * normally the section itself). Keeps the section title pinned
+   * while the content below scrolls — without it, scrolling the
+   * graph up to read the entity list above also drags the title
+   * out of view, forcing the user to scroll back to find their
+   * bearings.
+   *
+   * NOTE: the graph section overrides this below — it uses a
+   * dedicated `.graph-body` scroll container instead of sticky,
+   * so the section's scrollbar lives entirely below the title
+   * rather than beside it. */
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+/* Graph section: the header is a flex sibling of `.graph-body`,
+ * not a sticky child. Override the sticky positioning so the
+ * scrollbar visually starts right under the header line. */
+.memory-section.long-term-graph .memory-section-header {
+  position: static;
+  z-index: auto;
+}
+/* Drag-reorder affordance: long-term section headers become draggable
+ * so users can swap 📌 笔记 / 🕸️ 图谱 positions. Cursor hints +
+ * visual states for the dragging source and the drop target. */
+.memory-section-header.draggable {
+  cursor: grab;
+  transition: opacity .15s, box-shadow .15s, background .15s;
+  user-select: none;
+}
+.memory-section-header.draggable:hover {
+  background: var(--panel-2);
+}
+/* While this header is being dragged away from — fade + slight lift */
+.memory-section-header.is-dragging {
+  opacity: 0.4;
+  cursor: grabbing;
+}
+/* This header is currently the drop target — highlight the top edge
+ * with the accent color so the user sees exactly where the section
+ * will land. */
+.memory-section-header.drop-target {
+  box-shadow: inset 0 2px 0 0 var(--accent);
+  background: var(--accent-soft);
+}
+.memory-section-header.draggable:active {
+  cursor: grabbing;
+}
+.memory-section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+/* Hover-hint icon next to a section title. Wrapper carries the cursor;
+ * inner SVG inherits `color` so the gray tone follows the theme tokens.
+ * The actual tooltip is rendered via <Teleport to="body"> (see
+ * .memory-info-tooltip-floating below) so it escapes the memory
+ * panel's `overflow: hidden` and any z-index stacking context — the
+ * icon itself only needs the visual + cursor. */
+.memory-info-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 4px;
+  width: 14px;
+  height: 14px;
+  color: var(--text-dim);
+  cursor: help;
+  opacity: 0.7;
+  transition: opacity 0.15s ease;
+  vertical-align: middle;
+}
+.memory-info-icon:hover,
+.memory-info-icon:focus-within {
+  opacity: 1;
+}
+/* Inner SVG must be transparent to pointer events so the wrapper owns
+ * hover (no child intercepts enter/leave and breaks the bubble). */
+.memory-info-icon svg {
+  pointer-events: none;
+}
+
+/* Floating tooltip, teleported to <body>. Uses `position: fixed` with
+ * viewport coordinates from getBoundingClientRect() so it sits outside
+ * the memory panel's stacking context entirely; high z-index makes it
+ * a peer of every other top-level overlay. transform translates by
+ * half its own height to vertically center on the icon. */
+.memory-info-tooltip-floating {
+  position: fixed;
+  transform: translateY(-50%);
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.3;
+  white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+  /* 10001 — one above the fullscreen-preview backdrop (10000)
+   * so the tooltip stays visible when it pops up *inside* the
+   * preview modal. (Inline use case also gets a higher z-index
+   * with no downside — nothing else in the app lives above
+   * 10000.) */
+  z-index: 10001;
+  pointer-events: none;
+  user-select: none;
+}
+/* Group of right-side controls (count badge + collapse chevron). */
+.memory-section-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.memory-section-count {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  background: var(--panel-2);
+  padding: 1px 8px;
+  border-radius: 8px;
+  min-width: 22px;
+  text-align: center;
+}
+/* Dimmer than the digits themselves — the "｜" is a separator,
+ * not data, so it shouldn't compete visually with the counts.
+ * We use `--text-dim` (the same color as the surrounding badge
+ * text) at half opacity rather than `--border`, because
+ * `--border` (#e4e7ec) is so close to the badge's `--panel-2`
+ * background (#f0f2f5) that the bar effectively disappears. */
+.memory-section-count .count-sep {
+  color: var(--text-dim);
+  opacity: 0.5;
+  font-weight: 400;
+  /* Inline padding around the bar so digits don't sit flush against
+   * it. Avoids `display: inline-flex` on the parent (which would
+   * affect the simpler text-only badges used by the short-term and
+   * notes sections). */
+  padding: 0 2px;
+}
+.memory-collapse-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  line-height: 1;
+  padding: 0;
+  cursor: pointer;
+  transition: background .15s, color .15s, border-color .15s;
+}
+.memory-collapse-btn:hover {
+  background: var(--panel-2);
+  color: var(--text);
+  border-color: var(--text-dim);
+}
+/* "View raw file" trigger — same chrome as the collapse button, but
+ * a 📄 glyph so the two read as distinct actions. */
+.memory-view-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  line-height: 1;
+  padding: 0;
+  cursor: pointer;
+  transition: background .15s, color .15s, border-color .15s;
+}
+.memory-view-btn:hover {
+  background: var(--panel-2);
+  color: var(--text);
+  border-color: var(--text-dim);
+}
+.memory-empty {
+  padding: 24px 14px;
+  color: var(--text-dim);
+  font-size: 12px;
+  text-align: center;
+}
+.memory-empty.error { color: var(--error); }
+
+/* Scrollable list of memory entries. */
+.memory-list {
+  list-style: none;
+  margin: 0;
+  padding: 8px 10px;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+.memory-item {
+  display: flex;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--panel-2);
+  margin-bottom: 6px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text);
+}
+/* Subtle left accent per role so a glance tells user/assistant/tool apart.
+ * User → mustard yellow (--assistant), assistant → green (--accent). */
+.memory-item.role-user { border-left: 3px solid var(--assistant); }
+.memory-item.role-assistant { border-left: 3px solid var(--accent); }
+.memory-item.role-tool { border-left: 3px solid var(--text-dim); }
+.memory-role {
+  flex-shrink: 0;
+  font-size: 14px;
+  line-height: 1.3;
+  width: 18px;
+  text-align: center;
+}
+.memory-body { min-width: 0; flex: 1; }
+.memory-tool-calls {
+  margin-bottom: 4px;
+}
+.memory-tool-call {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+.memory-tool-tag {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 2px 6px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--text-dim);
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+.memory-tool-tag:hover {
+  background: var(--panel-2);
+  border-color: var(--text-dim);
+  color: var(--text);
+}
+.memory-tool-tag-open {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--text);
+}
+.memory-tool-tag-name {
+  /* base style only — chip text */
+}
+.memory-tool-args-block {
+  margin: 0;
+  padding: 6px 8px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-dim);
+  word-break: break-all;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  max-width: 100%;
+  max-height: 180px;
+  overflow-y: auto;
+}
+.memory-tool-name {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-dim);
+  margin-bottom: 2px;
+}
+.memory-text {
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+/* LLM thinking block, surfaced as a collapsible to keep memory cards
+ * compact in the narrow left rail. Same `<details>` pattern as the
+ * chat-side ThinkingBlock, but inlined here to avoid pulling the
+ * full component into a card where it would feel heavy. */
+.memory-thinking {
+  margin: 4px 0;
+  font-size: 11px;
+}
+.memory-thinking-summary {
+  cursor: pointer;
+  color: var(--text-dim);
+  font-style: italic;
+  font-size: 11px;
+  list-style: none;
+  user-select: none;
+  padding: 2px 0;
+}
+.memory-thinking-summary::-webkit-details-marker { display: none; }
+.memory-thinking-summary::before {
+  content: "▸";
+  display: inline-block;
+  margin-right: 4px;
+  transition: transform 0.15s;
+  font-style: normal;
+}
+.memory-thinking[open] .memory-thinking-summary::before {
+  transform: rotate(90deg);
+}
+.memory-thinking-text {
+  margin: 4px 0 0;
+  padding: 6px 8px;
+  background: var(--panel);
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  font-style: italic;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+/* Long-term notes look slightly different — no role accent, just a
+ * top meta line with category + relative time, then the content. */
+.memory-item.long-note {
+  flex-direction: column;
+  gap: 4px;
+  border-left: 0;
+  background: var(--panel-2);
+}
+.note-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.note-category {
+  background: var(--accent-soft);
+  color: var(--accent);
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+/* Per-category hues for everything EXCEPT `user_preference` (which
+ * falls through to the base rule above and inherits the green accent
+ * so its identity stays aligned with the project's main color).
+ * Both light + dark themes share the same class names — the underlying
+ * --cat-* variables flip values automatically. Unknown categories
+ * (e.g. agent-invented names) also fall through to the green base. */
+.note-category.cat-project-info {
+  background: var(--cat-project-info-soft);
+  color: var(--cat-project-info);
+}
+.note-category.cat-decision {
+  background: var(--cat-decision-soft);
+  color: var(--cat-decision);
+}
+.note-category.cat-general {
+  background: var(--cat-general-soft);
+  color: var(--cat-general);
+}
+.note-time { font-variant-numeric: tabular-nums; }
+.note-content { color: var(--text); word-break: break-word; }
+
+/* ----- Radial graph (长期记忆图谱) -----
+ * Inline SVG visualization: selected entity at center, neighbors
+ * distributed evenly on a circle, edges drawn with relationType
+ * labels. Layout is computed in JS (see radialLayout in
+ * MemoryPanel.vue) so this CSS is purely about visual styling. */
+
+/* 6-color palette for outer nodes. Picked to be distinguishable
+ * for the common 6-8 neighbor case; both light + dark themes reuse
+ * the same CSS vars so we don't need separate definitions below. */
+:root {
+  --node-color-1: #2563eb;  /* blue   */
+  --node-color-2: #0891b2;  /* cyan   */
+  --node-color-3: #059669;  /* green  */
+  --node-color-4: #b88400;  /* amber  */
+  --node-color-5: #8b5cf6;  /* purple */
+  --node-color-6: #db2777;  /* pink   */
+}
+/* Dark mode: shift each color up slightly so they hold their
+ * identity against the dark panel without becoming neon. */
+[data-theme="dark"] {
+  --node-color-1: #60a5fa;
+  --node-color-2: #38bdf8;
+  --node-color-3: #34d399;
+  --node-color-4: #fbbf24;
+  --node-color-5: #a78bfa;
+  --node-color-6: #f472b6;
+}
+
+.radial-graph-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  /* `position: relative` makes this the containing block for the
+   * absolutely-positioned `.radial-fullscreen-btn` (and any other
+   * future overlay). Without it, the button would resolve its
+   * `top/left` against the nearest positioned ancestor — usually
+   * `.memory-panel` or further up — and end up floating outside
+   * the SVG area. */
+  position: relative;
+  gap: 0;
+  padding: 4px 12px 14px;
+}
+
+/* ----- Entity pill row (top of the section) -----
+ * Horizontally-scrolling chips so users can switch the center
+ * entity. Scrollbar is *visible* (thin) so users can see there's
+ * more content to scroll to — hiding it entirely left users
+ * wondering why the row was cut off. Active chip gets the accent
+ * color + soft fill so the current selection is obvious. */
+.radial-picker {
+  display: flex;
+  gap: 5px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  /* Hairline 2px-tall scrollbar that hugs the bottom edge. Thin
+   * enough that the pills and SVG read as visually connected, but
+   * still visible enough to communicate "more chips available →
+   * scroll right". `scrollbar-width: thin` gives Firefox the
+   * equivalent; the webkit rule below does Chromium / Safari.
+   * Track stays transparent so only the thumb is colored. */
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+  /* Extend the pills row to the panel's left and right borders by
+   * cancelling out the cumulative horizontal padding of the two
+   * ancestors (`.graph-body` 12px + `.radial-graph-wrap` 12px =
+   * 24px). The negative margin is offset by equal padding inside
+   * the row, so the first/last chips still have the same 12px
+   * breathing room from the panel edges as before. Net effect:
+   * the row's scroll area (and its scrollbar) spans full panel
+   * width instead of being inset by 24px. */
+  margin: 0 -24px;
+  /* Extra bottom padding pushes the hairline scrollbar clear of the
+   * chips — with only 2px it sat right under the pills and clipped
+   * their lower edge. 8px gives the thumb its own gutter below the row. */
+  padding: 4px 12px 8px;
+}
+.radial-picker::-webkit-scrollbar {
+  height: 1px;
+}
+.radial-picker::-webkit-scrollbar-track {
+  background: transparent;
+}
+.radial-picker::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 1px;
+}
+.radial-picker::-webkit-scrollbar-thumb:hover {
+  background: var(--text-dim);
+}
+
+.radial-pill {
+  /* Don't let chips stretch to fill the row — they should size to
+   * their content so horizontal scroll feels natural. */
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 10.5px;
+  font-family: var(--font-sans, system-ui, sans-serif);
+  /* Flatter: was 4px 10px, now 2px 8px — fits 1 line of 10.5px
+   * text plus a hairline border in ~20px total height instead of
+   * ~24px. The chip still has tap-target room because the row is
+   * tall enough on its own. */
+  padding: 2px 8px;
+  border-radius: 999px;
+  cursor: pointer;
+  max-width: 140px;
+  white-space: nowrap;
+  /* Outline removed in BOTH focus + focus-visible so the browser
+   * default blue ring never appears on click. We provide our
+   * own keyboard-focus feedback via :focus-visible below. */
+  outline: none;
+  transition: background .15s, border-color .15s, color .15s, transform .1s;
+}
+.radial-pill:hover {
+  border-color: var(--node-color-1);
+  color: var(--text);
+}
+.radial-pill:active {
+  transform: translateY(1px);
+}
+.radial-pill.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+/* Keyboard focus ring — only shows when the user tabs into the
+ * row (not on mouse click). Keeps accessibility while avoiding the
+ * "blue frame on click" UX problem. */
+.radial-pill:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+.radial-pill-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  /* Subtle inner ring gives the dot depth on both light + dark. */
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+}
+.radial-pill-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ----- Radial SVG -----
+ * Width follows the sidebar; height is auto from the viewBox. The
+ * cap keeps it from blowing up on tall windows; the background
+ * gradient gives the graph a subtle stage-like backdrop without
+ * being a heavy chrome element. */
+.radial-graph {
+  display: block;
+  width: 100%;
+  height: auto;
+  /* Bumped to 400px to match the new 400×400 viewBox. The viewBox
+   * is square so width == height at 1:1; for typical sidebar
+   * widths (280–480px), this lets the SVG use the full width
+   * while capping it before the panel eats vertical space. */
+  max-height: 400px;
+  user-select: none;
+  border-radius: 10px;
+  /* Soft radial gradient — fades from a faint accent at the
+   * center to fully transparent at the edges. Makes the graph
+   * feel "presented" rather than floating on bare panel. */
+  background:
+    radial-gradient(
+      circle at 50% 50%,
+      var(--accent-soft) 0%,
+      transparent 70%
+    );
+}
+
+/* ----- Edges + arrowheads -----
+ * Outgoing edges (center → outer) draw with the accent stroke
+ * color so the user reads "this entity owns these relations".
+ * Incoming edges use the text-dim color to read as "borrowed"
+ * relations pointing in. Arrowhead fill inherits so it always
+ * matches its line. */
+.radial-edge {
+  stroke: var(--accent);
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  fill: none;
+  opacity: 0.85;
+  transition: opacity .15s;
+}
+.radial-edge.incoming {
+  stroke: var(--text-dim);
+  stroke-dasharray: 3 3;       /* dashed = incoming, subtle but readable */
+  opacity: 0.7;
+}
+.radial-graph:hover .radial-edge { opacity: 0.4; }
+.radial-edge-label {
+  font-size: 11px;
+  fill: var(--text);
+  font-family: var(--font-mono);
+  font-weight: 500;
+  paint-order: stroke fill;
+  stroke: var(--panel);
+  stroke-width: 4;
+  stroke-linejoin: round;
+  pointer-events: none;          /* labels never steal hover from edges */
+}
+.radial-arrow-fill {
+  fill: var(--accent);
+}
+.radial-edge.incoming + .radial-edge-label,
+line.radial-edge.incoming ~ .radial-edge-label { /* visual parity with dashed line */
+  /* No-op selector — labels share the same halo regardless of direction */
+}
+
+/* ----- Center node -----
+ * Solid accent fill with a slightly larger, semi-transparent halo
+ * ring behind it. The halo does two things: (1) marks the center
+ * unambiguously even when an edge label crosses it, (2) gives the
+ * graph a subtle focal point. */
+.radial-center-halo {
+  fill: var(--accent);
+  opacity: 0.15;
+}
+.radial-center circle:not(.radial-center-halo) {
+  fill: var(--accent);
+  stroke: var(--accent);
+  stroke-width: 2;
+  /* Subtle drop shadow gives the node depth without being noisy. */
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.18));
+  transition: filter .15s, stroke-width .15s;
+}
+/* Cursor + hover lift on the center — signals to the user that
+ * there's something to discover (the observation tooltip). We
+ * animate the drop-shadow instead of `transform` for the same
+ * reasons as the outer-node hover: avoiding SVG bounding-box
+ * oscillation. */
+.radial-center {
+  cursor: help;
+  outline: none;
+}
+.radial-center:hover circle:not(.radial-center-halo),
+.radial-center:focus circle:not(.radial-center-halo),
+.radial-center:focus-visible circle:not(.radial-center-halo) {
+  stroke-width: 3;
+  filter: drop-shadow(0 3px 5px rgba(0, 168, 107, 0.4));
+  outline: none;
+}
+.radial-center-name {
+  fill: #ffffff;
+  font-size: 13.5px;
+  font-weight: 700;
+  paint-order: stroke fill;
+  stroke: var(--accent);
+  stroke-width: 3;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+
+/* ----- Center observation tooltip (teleported to body) -----
+ * Structured tooltip shown when hovering the center node. Distinct
+ * from `.memory-info-tooltip-floating` (single-line, used for the
+ * section-info icons) because observations need a header + list
+ * layout to be readable. Same positioning strategy (right of
+ * anchor, vertically centered via translateY) so it feels
+ * consistent. */
+.center-tooltip-floating {
+  position: fixed;
+  /* Vertically center on the anchor y-coordinate set by
+   * `showCenterTooltip`. The translateY is half the tooltip's own
+   * height — recalculated by the browser on each render, so the
+   * tooltip stays centered even when the observation list grows. */
+  transform: translateY(-50%);
+  max-width: 280px;
+  min-width: 180px;
+  padding: 10px 12px 12px;
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.22);
+  /* 10001 — one above the fullscreen-preview backdrop (10000)
+   * so the observation tooltip stays visible when hovering the
+   * center node inside the preview modal. (Inline use case also
+   * benefits — nothing else in the app lives above 10000.) */
+  z-index: 10001;
+  pointer-events: none;
+  user-select: none;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.center-tooltip-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.center-tooltip-name {
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--text);
+}
+.center-tooltip-type {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-dim);
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  padding: 1px 6px;
+  border-radius: 3px;
+}
+.center-tooltip-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.center-tooltip-list li {
+  position: relative;
+  padding: 2px 0 2px 14px;
+  font-size: 11.5px;
+  color: var(--text);
+  /* `•` rendered via `::before` so it inherits color from a CSS
+   * var and doesn't drift with system fonts. */
+}
+.center-tooltip-list li::before {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 9px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+/* ----- Outer nodes -----
+ * Each outer node reads its color from a per-node CSS custom
+ * property (`--node-color`) set inline by Vue. The dot pattern is
+ * the same — solid stroke + slightly lighter fill, with a soft
+ * drop shadow for depth. Hovering / focusing the node:
+ *   1. Switches the fill to the entity color
+ *   2. Thickens the stroke
+ *   3. Grows the circle radius by 2px (via the SVG `r` attribute)
+ *
+ * Why we animate `r` and not `transform: scale(...)`:
+ *   - `transform: scale` on the parent `<g>` causes hit-testing to
+ *     drift as the bounding box moves under the cursor, producing a
+ *     visible oscillation ("twitching"). The bounding box also
+ *     includes the label text, so `transform-origin: center`
+ *     lands off-circle.
+ *   - Animating `r` on the `<circle>` itself is stable: the hit
+ *     target only grows outward from its center, the cursor stays
+ *     inside the new radius, and `:hover` doesn't flicker.
+ */
+.radial-outer-node {
+  cursor: pointer;
+  /* No outline in any focus state — the browser's default blue
+   * ring renders around the `<g>`'s SVG bounding box on click,
+   * which looks like a tacky frame. Keyboard users still get a
+   * clear focus cue via the circle color/size change below. */
+  outline: none;
+}
+.radial-outer-node:focus,
+.radial-outer-node:focus-visible {
+  outline: none;
+}
+.radial-outer-node circle {
+  fill: var(--panel);
+  stroke: var(--node-color, var(--node-color-1));
+  stroke-width: 1.8;
+  /* `r` is bound from Vue (radialLayout.outerR = 20). Animating it
+   * on hover via CSS is supported in all modern browsers and only
+   * affects geometry — hit-testing follows the new radius, so no
+   * pointer drift. */
+  transition: r .15s ease, stroke-width .15s ease, fill .15s ease;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.12));
+}
+.radial-outer-node:hover circle,
+.radial-outer-node:focus circle,
+.radial-outer-node:focus-visible circle {
+  r: 23;
+  fill: var(--node-color, var(--node-color-1));
+  stroke-width: 2.4;
+  outline: none;
+}
+.radial-outer-node text {
+  fill: var(--text);
+  font-size: 12.5px;
+  font-weight: 600;
+  paint-order: stroke fill;
+  stroke: var(--panel);
+  stroke-width: 3.2;
+  stroke-linejoin: round;
+  pointer-events: none;
+  /* `text` element is a sibling of `<circle>`, not the hover target —
+   * keep the label readable where it crosses the connecting edges.
+   * Animating font-size on hover would also drift the label, so we
+   * stick with color/stroke changes only — same visual cue, no
+   * oscillation risk. */
+  transition: fill .15s ease, stroke .15s ease;
+}
+.radial-outer-node:hover text,
+.radial-outer-node:focus-visible text {
+  fill: #ffffff;
+  stroke: var(--node-color, var(--node-color-1));
+}
+
+/* ----- Empty radial hint -----
+ * Shown when the user picked an entity that has no relations.
+ * Visually centers the entity name so it's clearly the focus. */
+.radial-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 36px 8px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.radial-empty-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* ----- Fullscreen preview button -----
+ * Overlaid on the SVG area at top-left, just below the pills
+ * row. Absolute positioning means it doesn't affect layout — the
+ * SVG keeps its full size underneath. Sits above the SVG via
+ * z-index so it's always clickable.
+ *
+ * The containing block is `.radial-graph-canvas` (a thin wrapper
+ * around just the SVG + this button) — NOT `.radial-graph-wrap`
+ * which also contains the pills row above. If we used the wrap
+ * as the containing block, `top: 4px` would land inside the pills
+ * area and visually overlap them.
+ *
+ * Why top-left specifically: the section's collapse chevron +
+ * count badge sit in the header (top-right of the section), so
+ * top-left is the only "open real estate" on the SVG area that
+ * doesn't compete with existing controls. */
+.radial-graph-canvas {
+  /* Sole purpose: be the containing block for `.radial-fullscreen-btn`.
+   * The SVG fills this wrapper via its own 100%-width rule.
+   * No margin/padding here — keeps the SVG tight against the pills
+   * row above (the user explicitly asked for tight spacing). The
+   * visible gap between the pills and the fullscreen icon comes
+   * from the icon's own `top` offset, not from pushing the SVG
+   * down. */
+  position: relative;
+}
+.radial-fullscreen-btn {
+  position: absolute;
+  /* Pushed deeper into the SVG (top: 24px) so the icon clearly
+   * sits below the pills row in any browser — including Firefox
+   * whose thin scrollbar reserves ~6-8px below the pills. The
+   * icon's bottom edge lands at top:48px, leaving a comfortable
+   * ~15px gap below the pills. */
+  top: 20px;
+  left: 8px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 0;
+  /* Default state: half-transparent so it doesn't visually
+   * compete with the graph. On hover it becomes fully opaque +
+   * accented — the standard "always-available but unobtrusive"
+   * pattern for overlay controls. */
+  opacity: 0.8;
+  transition: opacity .15s, color .15s, border-color .15s, background .15s;
+}
+.radial-fullscreen-btn:hover,
+.radial-fullscreen-btn:focus-visible {
+  opacity: 1;
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  outline: none;
+}
+
+/* ----- Fullscreen preview modal -----
+ * Teleported to body. Backdrop is a full-viewport dim overlay;
+ * the card sits centered with max dimensions to leave breathing
+ * room. The SVG inside the card uses the same RadialGraphSvg
+ * component as the inline render, so colors / interactions stay
+ * in sync — but the card gives the SVG ~700px to breathe in,
+ * vs the sidebar's ~280–480px. */
+.graph-preview-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  animation: graph-preview-fade-in .15s ease;
+}
+@keyframes graph-preview-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.graph-preview-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+  width: 100%;
+  max-width: 760px;
+  max-height: calc(100vh - 48px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: graph-preview-pop .18s ease;
+}
+@keyframes graph-preview-pop {
+  from { transform: scale(0.96); opacity: 0; }
+  to   { transform: scale(1); opacity: 1; }
+}
+.graph-preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  background: var(--panel);
+}
+.graph-preview-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+.graph-preview-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 0;
+  transition: color .15s, background .15s, border-color .15s;
+}
+.graph-preview-close:hover,
+.graph-preview-close:focus-visible {
+  color: var(--text);
+  background: var(--panel-2);
+  border-color: var(--border);
+  outline: none;
+}
+.graph-preview-body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 16px 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+}
+/* The SVG inside the modal gets a more relaxed size cap than the
+ * inline version. The same viewBox renders larger because the
+ * parent is wider; cap at 680px so very tall viewports don't blow
+ * the graph up past readability. */
+.graph-preview-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-width: 680px;
+  max-height: 680px;
+  align-self: center;
+  border-radius: 12px;
+  /* Same radial-gradient backdrop as inline — visually consistent
+   * so the enlarged version feels like the same component, just
+   * bigger, rather than a different mode. */
+  background:
+    radial-gradient(
+      circle at 50% 50%,
+      var(--accent-soft) 0%,
+      transparent 70%
+    );
+}
+
+/* ----- Agent 初始化折叠按钮（preamble） -----
+   渲染在 ChatPanel 第一轮对话的用户气泡下方、Step 1 上方。
+   5 步初始化信息折叠成单个按钮，点击展开。 */
+
+/* 外层容器（不要有 margin 影响周围的 turn 排版） */
+.init-button {
+  margin: 0;
+  /* Match `.step-card`'s 800px ceiling so the init inspector and the
+   * regular step cards below it sit on the same horizontal column.
+   * Without this the init button stretches to the full chat width
+   * (which can be much wider on big screens) and reads as a different
+   * "tier" of UI element than the steps themselves. `align-self`
+   * keeps the cap in effect inside the flex .chat-messages column. */
+  max-width: 800px;
+  align-self: stretch;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  /* 去掉圆角 —— 让初始化完成的绿色提示以纯矩形呈现，和"已完成"的状态语义对齐 */
+  border-radius: 0;
+  overflow: hidden;
+}
+
+/* 折叠按钮：默认浅绿提示，hover/expanded 改成深绿 + 白字
+   （深绿 #15803d ≈ Tailwind green-700，跟品牌色 #00a86b 同色系
+    但足够深，跟白字对比度 ~5.5:1 满足 WCAG AA） */
+.init-button-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 14px;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent);
+  border-radius: 0;
+  cursor: pointer;
+  font: inherit;
+  color: var(--text);
+  text-align: left;
+  transition: background .15s, color .15s, border-color .15s;
+}
+.init-button-header:hover,
+.init-button-header.expanded {
+  background: #15803d;
+  border-color: #15803d;
+  color: #ffffff;
+}
+.init-button-header.expanded {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.init-button-icon {
+  font-weight: 700;
+  color: var(--accent);
+  flex-shrink: 0;
+  font-size: 14px;
+}
+.init-button-header:hover .init-button-icon,
+.init-button-header.expanded .init-button-icon {
+  color: #ffffff;
+}
+.init-button-label {
+  font-weight: 600;
+  flex-shrink: 0;
+  font-size: 13px;
+}
+.init-button-hint {
+  /* 纯文字指引，告诉用户点击展开 5 步详情。
+     不加 pill 背景，避免视觉权重盖过主标签。 */
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+.init-button-header:hover .init-button-hint,
+.init-button-header.expanded .init-button-hint {
+  color: rgba(255, 255, 255, 0.85);
+}
+.init-button-summary {
+  flex: 1;
+  color: var(--text-dim);
+  font-size: 12px;
+  font-family: var(--font-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.init-button-header:hover .init-button-summary,
+.init-button-header.expanded .init-button-summary {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+/* 展开后的 5 步卡容器 */
+.init-button-body {
+  /* 父 .init-button 已经统一处理 border + 圆角，这里只负责内容布局 */
+  background: var(--panel);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-top: 1px solid var(--border);
+  /* 滚动条由下面的 .init-tab-content 承担 —— 这样上方的 5 个
+     小标签行(.init-tabs)始终固定不动,只有内容区滚动 */
+}
+
+/* Loading / Error 状态（替代按钮） */
+.init-button-loading,
+.init-button-error {
+  /* 跟完成态 .init-button-header 一样：撑满父容器宽度，padding/border 算在 width 里。
+     不显式声明 width:100% 时，flex-direction:row 覆盖了父级 column，
+     在某些场景下 wrapper 会 shrink-to-fit 内容，导致比完成态窄。 */
+  width: 100%;
+  box-sizing: border-box;
+  padding: 9px 14px;
+  /* 不要自己的圆角 —— 父 .init-button 用 overflow:hidden + border-radius 统一处理 */
+  border-radius: 0;
+  display: flex;
+  flex-direction: row;      /* 覆盖 .init-button 的 column —— pulse-dot 和文字要横排 */
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  white-space: nowrap;     /* 文字不换行 */
+  /* loading → 完成态用 250ms 渐变，避免硬切造成"突然出现"的视觉跳变 */
+  transition: background-color .25s ease, border-color .25s ease, color .25s ease;
+}
+.init-button-loading {
+  /* 用 accent-soft（浅绿）当底色，跟完成态的绿色按钮视觉上"预告"对齐。
+     这样用户从 loading → 完成 不是从灰色突然跳到绿色，而是同色系的接力。 */
+  background: var(--accent-soft);
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+  white-space: nowrap;   /* "正在初始化 Agent…" 不换行 */
+}
+.init-button-loading .pulse-dot {
+  /* loading 里的 pulse-dot 略放大 + 同色系呼吸，更醒目 */
+  width: 10px;
+  height: 10px;
+  background: var(--accent);
+}
+.init-button-error {
+  background: var(--error-bg);
+  border: 1px solid var(--error);
+  color: var(--error);
+}
+.init-button-error-icon { font-size: 16px; flex-shrink: 0; }
+
+/* 横排标签（5 个步骤）—— 5 个独立的 pill 按钮，之间用 → 分隔
+   - 容器不再有外框/圆角（之前 strip 的 1px border 在箭头上下端形成
+     "勾边线"），改由每个 tab 自带 border + border-radius
+   - 箭头底色透明，自然浮在 body 底色上 */
+.init-tabs {
+  display: flex;
+  align-items: stretch;
+  flex-wrap: wrap;          /* 容器太窄时允许换行，避免内容被裁掉 */
+  background: transparent;
+  /* 极小 gap 让 pill 之间留有视觉间隙（不需要箭头自己撑开） */
+  gap: 2px;
+}
+.init-tab {
+  flex: 1 1 0;              /* 优先等宽铺满容器宽度 */
+  min-width: max-content;   /* 容器太窄时不再压缩，按钮宽度退回文字内容，确保完整显示 */
+  position: relative;       /* 让 .init-tab-icon 的绝对定位有参考 */
+  /* 文字居中在 tab 的水平中线 —— 用对称 padding,
+     文字才能被 justify-content:center 推到 tab 的正中。
+     之前 padding-left=26px 多出的 16px 会把内容区中心向右偏 8px。
+     图标绝对定位到左边,不挤占文字的居中空间。 */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 10px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;       /* 4 个角都加圆角 */
+  color: var(--text-dim);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;      /* 按钮内文字不换行 */
+  transition: background .15s, color .15s, border-color .15s;
+}
+.init-tab:hover {
+  background: var(--panel);
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+/* ----- 三态视图（pending / loading / done） -----
+   done     = 原 .init-tab 样式（实色边框、可点击、accent hover）
+   loading  = pulse-dot + accent dashed 边框，让用户一眼看出"卡在这步"
+   pending  = ○ + 灰显 + 不可点 */
+
+/* 槽左侧的状态图标（✓ / ○ / pulse-dot） */
+.init-tab-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  font-size: 11px;
+  /* 绝对定位脱离 flex 流 —— 让 .init-tab 里的文字能独立被
+     justify-content:center 推到 tab 水平中线,
+     而不被左侧图标"拽"得偏右 */
+  position: absolute;
+  left: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  flex-shrink: 0;
+}
+
+/* 标签文字：双保险 —— flex 居中把 span 推到 tab 中线,
+   text-align: center 把 span 内部的文字也在 span 内居中,
+   避免某些情况下 span 被拉到比文字宽,导致文字左偏。 */
+.init-tab-title {
+  text-align: center;
+  flex: 1 1 auto;          /* 撑满 tab 内容区,确保 text-align 居中生效 */
+}
+
+/* done 状态的颜色 + 加粗强调 */
+.init-tab.state-done {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* loading：accent dashed 边框 + 同色文字 + pulse-dot 动效 */
+.init-tab.state-loading {
+  color: var(--accent);
+  border-color: var(--accent);
+  border-style: dashed;
+  background: var(--accent-soft);
+  cursor: wait;
+}
+.init-tab.state-loading .pulse-dot {
+  /* 复用全局 pulse-dot,用 --accent 着色跟当前状态语义一致 */
+  background: var(--accent);
+  box-shadow: 0 0 0 0 var(--accent);
+}
+/* 暗色主题下的 loading 背景微调：--accent-soft 已经半透明,直接复用 */
+:root[data-theme="dark"] .init-tab.state-loading {
+  /* 暗色主题 --accent-soft 是 rgba,这里稍微提亮一下 dashed 边框 */
+  border-color: var(--accent);
+}
+
+/* pending：灰显,不可点击 */
+.init-tab.state-pending {
+  opacity: 0.4;
+  filter: grayscale(0.6);
+  cursor: not-allowed;
+}
+.init-tab.state-pending:hover {
+  /* pending 不响应 hover（不变成 accent 绿），避免误导 */
+  background: var(--panel-2);
+  color: var(--text-dim);
+  border-color: var(--border);
+}
+
+/* 全局 disabled 兜底（防止用户用键盘 tab 到 pending tab 上） */
+.init-tab[disabled] { cursor: not-allowed; }
+
+/* 选中：深绿 + 白字，跟外层按钮 hover/expanded 一致
+   green-700 跟品牌色 #00a86b 同色系，对比度足够高
+   必须放在 .init-tab.state-done 之后 —— 否则 state-done 的
+   color: var(--accent)（绿字）会按源码顺序覆盖这里的白字，
+   出现"绿底绿字"的难看组合 */
+.init-tab.active {
+  background: #15803d;
+  color: #ffffff;
+  font-weight: 600;
+  border-color: #15803d;
+}
+
+/* loading 中、无 tab 选中时不再显示额外提示 —— 5 个标签自身的
+   三态视觉（pending/loading/done）已经足够传达进度，避免重复。 */
+
+/* ----- 抽屉式收起过渡（外层 .init-button-body） -----
+   核心思路：标签不能动 —— 它们像放在抽屉里的物品。
+   max-height 负责布局塌陷,clip-path 负责"抽屉从底部卷起"的视觉效果。
+   用 clip-path 而非 transform 是关键：clip-path 只裁剪显示区域,
+   元素本体不移动,所以 5 个标签始终锚定在 header 下方,
+   收起时只是被从底部往上"盖住"。 */
+.init-button-body {
+  overflow: hidden;
+}
+.collapse-enter-active,
+.collapse-leave-active {
+  transition:
+    max-height .4s cubic-bezier(0.4, 0, 0.2, 1),
+    clip-path .4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.collapse-enter-from,
+.collapse-leave-to {
+  max-height: 0;
+  /* inset(top right bottom left):从底部裁 100%,即完全看不见 */
+  clip-path: inset(0 0 100% 0);
+}
+.collapse-enter-to,
+.collapse-leave-from {
+  max-height: 80vh;
+  /* 4 边都裁 0,完全可见 */
+  clip-path: inset(0 0 0 0);
+}
+.init-tab-arrow {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+  /* 箭头底色透明，自然浮在 body 底色上，跟两侧 pill 区分开 */
+  background: transparent;
+  /* 用更亮的 slate-400 + 加粗，明显区别于标签的 --text-dim 灰 */
+  color: #94a3b8;
+  font-size: 14px;
+  font-weight: 700;
+  user-select: none;
+}
+:root[data-theme="dark"] .init-tab-arrow {
+  color: #64748b;  /* 暗色主题下用更亮的 slate-500 保持可见 */
+}
+
+/* 选中标签的内容区 */
+.init-tab-content {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 14px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  /* 源码 / JSON / 完整 prompt 可能 1500-3000px 高,
+     把内容区做成可滚动容器 —— 上方的 5 个小标签行保持不动,
+     滚动条只出现在内容区内部,不影响页面或外层布局 */
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+/* 通用 section 块 */
+.init-section h4 {
+  margin: 12px 0 6px;
+  font-size: 11px;
+  color: var(--text-dim);
+  font-weight: 600;
+}
+.init-section h4:first-child { margin-top: 4px; }
+.init-section h5 {
+  margin: 10px 0 4px;
+  font-size: 12px;
+  color: var(--text-dim);
+  font-weight: 600;
+}
+
+/* System Prompt 中由 skills loader 注入的那一段。
+   用左侧 accent 色边条 + 浅 accent 底色跟普通 SP 内容做区分,
+   顶部的 "从 skills 注入" 小标签让语义更明确。 */
+.injected-skills {
+  position: relative;
+  margin: 10px 0;
+  padding: 10px 12px 8px;
+  background: var(--accent-soft);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 4px 4px 0;
+}
+.injected-skills-tag {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+  background: var(--panel);
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  padding: 1px 6px;
+  margin-bottom: 6px;
+  font-family: var(--font-mono);
+}
+
+.init-file-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.init-file-list li {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text);
+  padding: 4px 8px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  word-break: break-all;
+}
+.init-file-meta { color: var(--text-dim); font-size: 11px; }
+.init-file-note { color: var(--text-dim); font-style: italic; }
+
+/* 工具 family 块（第 3 步） */
+.init-tool-family {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 6px 0;
+}
+.init-tool-family-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--tool);
+  min-width: 130px;
+}
+.tool-tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  flex: 1;
+}
+.tool-tag.tag-tool,
+.tool-tag.tag-base,
+.tool-tag.tag-workspace {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+.tool-tag.tag-skill {
+  background: var(--accent-soft);
+  border: 1px solid var(--accent);
+  color: var(--accent);
+}
+.tool-tag.tag-mcp {
+  background: var(--panel);
+  border: 1px dashed var(--border);
+  color: var(--text-dim);
+}
+.init-family-note {
+  font-size: 11px;
+  color: var(--text-dim);
+  font-style: italic;
+  width: 100%;
+  padding-left: 142px;
+}
+
+/* ---------- GitHub 风格代码块 ---------- */
+/* 整个 call 块：圆角 + 边框 + 内部 stack 三段 */
+.init-call {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+/* 顶部 function 名称栏（深色，类似 GitHub code block 的 language tag） */
+.init-call-header {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 6px 12px;
+  background: var(--panel-2);
+  border-bottom: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.init-call-function {
+  color: var(--accent);
+  font-weight: 700;
+}
+.init-call-module {
+  color: var(--text-dim);
+  font-size: 11px;
+}
+.init-call-body {
+  border-top: 1px solid var(--border);
+}
+.init-call-body:first-of-type { border-top: none; }
+.init-call-section-title {
+  font-size: 10.5px;
+  color: var(--text-dim);
+  padding: 6px 12px 4px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+.init-call-source-path {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text);
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.init-call-source-label {
+  margin-left: auto;
+  font-size: 10.5px;
+  color: var(--text-dim);
+  font-weight: 400;
+}
+/* GitHub 风格代码块：浅色背景 + 等宽字体 + 横向滚动 */
+.init-code-block {
+  margin: 0;
+  padding: 10px 12px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.6;
+  white-space: pre;
+  overflow-x: auto;
+  color: var(--text);
+  /* GitHub 浅色主题：#f6f8fa；暗色主题：#161b22 —— 复用现有 --hljs-bg */
+  background: var(--hljs-bg);
+  border-radius: 0;
+}
+.init-code-source {
+  border-top: 1px solid var(--border);
+}
+/* 行号范围（"文件:起始-结束"，紧跟在文件路径后面，类似 IDE 的 goto-line） */
+.init-call-source-lineno {
+  color: var(--text-dim);
+  font-weight: 400;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  margin-left: 2px;
+}
+/* 简易 token 着色（highlight.js 未加载时的 fallback） */
+.init-code-block .lang-json .hljs-string,
+.init-code-block code .hljs-string { color: #0a3069; }
+.init-code-block .lang-python .hljs-keyword,
+.init-code-block code .hljs-keyword { color: #cf222e; }
+.init-code-block .lang-python .hljs-string,
+.init-code-block code .hljs-string { color: #0a3069; }
+.init-code-block .lang-python .hljs-number,
+.init-code-block code .hljs-number { color: #0550ae; }
+.init-code-block .lang-python .hljs-comment,
+.init-code-block code .hljs-comment { color: #6e7781; font-style: italic; }
+:root[data-theme="dark"] .init-code-block .lang-json .hljs-string,
+:root[data-theme="dark"] .init-code-block code .hljs-string { color: #a5d6ff; }
+:root[data-theme="dark"] .init-code-block .lang-python .hljs-keyword,
+:root[data-theme="dark"] .init-code-block code .hljs-keyword { color: #ff7b72; }
+:root[data-theme="dark"] .init-code-block .lang-python .hljs-number,
+:root[data-theme="dark"] .init-code-block code .hljs-number { color: #79c0ff; }
+:root[data-theme="dark"] .init-code-block .lang-python .hljs-comment,
+:root[data-theme="dark"] .init-code-block code .hljs-comment { color: #8b949e; font-style: italic; }
+
+/* 第 4 步：完整 prompt 折叠面板 */
+.init-prompts > summary {
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  padding: 8px 0;
+  user-select: none;
+}
+.init-prompts[open] > summary { margin-bottom: 6px; }
+.init-trunc-hint {
+  font-weight: 400;
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-left: 6px;
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * TurnSummaryCard / TokenBarChart 总结卡 + 柱状图
+ *
+ * 整体视觉与 AgentInitInspector 对齐:浅色 --accent-soft 底 + 圆角。
+ * 颜色全 CSS var() 驱动,亮/暗主题自动适配。
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/* TokenBarChart 的柱子入场动画:从 0 高度涨到真实高度。
+ * 必须放在全局 style.css(无 scope)里,否则 SVG <rect> 的 animation 引用不到。
+ * TokenBarChart 组件里给每个柱子设了 stagger animation-delay。 */
+@keyframes bar-grow {
+  from { transform: scaleY(0); }
+  to   { transform: scaleY(1); }
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * Flat conversation blocks — used by TurnContent + UserBlock + AssistantBlock
+ * + ThinkingBlock / ActionBlock / ObservationBlock.
+ *
+ * Replaces the old per-step `.step-card` wrapper. Each event in the agent
+ * loop (Thinking / Action / Observation / Assistant) is rendered as its own
+ * block, sharing the same chrome: rounded panel with a coloured left border
+ * for visual identity, plus a native <details>/<summary> collapse toggle.
+ *
+ * Defaults: every block starts COLLAPSED except the final Assistant content
+ * (which is always visible since it's the model's user-facing reply).
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+.turn-content {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-self: stretch;
+  /* No max-width here: the React-flow blocks cap themselves at 800px,
+   * while the per-step raw-data panel below stretches to the full
+   * chat width as a deliberate "secondary entry point". */
+}
+
+/* The user bubble uses the existing `.msg.user` chrome but gets a `msg-body`
+ * wrapper around the text content. The msg-body inherits the parent
+ * `white-space: pre-wrap` so multi-line user prompts render correctly. */
+.msg-body {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Shared chrome for all flat blocks. The native <details> element gives us
+ * free collapse behaviour; we only style the summary + body.
+ * `max-width: 800px` + `align-self: flex-start` keeps the React-flow
+ * blocks reading at the same width as the user bubble, so the per-step
+ * raw-data panel below can stretch to full chat width without
+ * disturbing this visual rhythm. */
+.flat-thinking,
+.flat-action,
+.flat-observation,
+.flat-assistant {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--panel);
+  max-width: 800px;
+  align-self: flex-start;
+  width: 100%;
+}
+
+/* Summary row (the always-visible header on each block). Looks identical
+ * to the previous .step-section-summary so the eye picks up the pattern
+ * across Thinking / Action / Observation. The chevron comes from a
+ * ::before pseudo on <summary>, hidden via display: list-item only on
+ * WebKit — see below. */
+.flat-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  padding: 10px 12px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+.flat-summary::-webkit-details-marker { display: none; }
+.flat-summary::before {
+  content: '▼';
+  font-size: 9px;
+  color: var(--text-dim);
+  margin-right: 2px;
+  flex-shrink: 0;
+}
+details:not([open]) > .flat-summary::before { content: '▶'; }
+
+.flat-icon {
+  font-size: 14px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+}
+
+.flat-label {
+  color: var(--text);
+}
+.flat-tool-name {
+  font-family: var(--font-mono);
+  color: var(--text-dim);
+  font-weight: 500;
+}
+
+.flat-block-body {
+  padding: 0 12px 12px 12px;
+  border-top: 1px solid var(--border);
+  min-width: 0;
+  max-height: 400px;
+  overflow-y: auto;
+}
+.flat-block-body > :first-child { margin-top: 12px; }
+.flat-block-body > :last-child  { margin-bottom: 0; }
+
+/* ----- Thinking ----- */
+.flat-thinking {
+  background: var(--panel);
+}
+/* Per-step loading placeholder: a Thinking-shaped shell with shimmer
+ * bars, shown when step_start has arrived but no thinking has streamed
+ * yet. Mirrors the `.flat-observation.pending` look exactly so the
+ * "still waiting" affordance reads identically whether the user is
+ * waiting for thinking content or for a tool result:
+ *   - dashed border
+ *   - accent-soft gradient on the summary row
+ *   - neutral gray pulse-dot
+ *   - same 12px waiting-label header + 3 shimmer rows
+ *   - same padding / gap / border-top
+ * Identity still comes from the 🧠 icon + "Thinking" label. */
+.thinking-loading {
+  background: var(--panel);
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  max-width: 800px;
+  align-self: flex-start;
+  width: 100%;
+}
+.thinking-loading-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  /* Same in-flight gradient as `.flat-observation.pending > .flat-summary`
+   * so waiting for thinking and waiting for a tool result look the same. */
+  background: linear-gradient(90deg, var(--accent-soft) 0%, transparent 60%);
+}
+.thinking-loading-header .flat-icon { color: var(--text-dim); }
+.thinking-loading-waiting {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-dim);
+  /* Push to the right so the layout matches `.result-pending-header`
+   * in observation — pulse-dot + main label on the left, waiting text
+   * floating to the right. */
+  margin-left: auto;
+}
+.thinking-loading-body {
+  padding: 4px 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border-top: 1px solid var(--border);
+}
+.flat-thinking > .flat-block-body { padding-top: 12px; }
+.flat-thinking .thinking-text {
+  margin: 0;
+  padding: 10px 12px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text);
+  max-height: 360px;
+  overflow-y: auto;
+}
+/* In-flight: subtle green gradient on the summary row when the LLM
+ * is still streaming thinking content. Reads as "live" without
+ * relying on a coloured block chrome. */
+.flat-thinking.in-flight > .flat-summary {
+  background: linear-gradient(90deg, var(--accent-soft) 0%, transparent 60%);
+}
+/* In-flight pulse dot — neutral gray instead of the global green so
+ * the thinking state doesn't visually compete with ASSISTANT (which
+ * also uses --accent). Lets the content stay the focal point. */
+.flat-thinking.in-flight > .flat-summary .pulse-dot {
+  background: var(--text-dim);
+  box-shadow: 0 0 0 0 rgba(107, 114, 128, 0.4);
+}
+@keyframes pulse-dot-gray {
+  0%, 100% { transform: scale(1);   box-shadow: 0 0 0 0   rgba(107, 114, 128, 0.45); }
+  50%      { transform: scale(1.3); box-shadow: 0 0 0 6px rgba(107, 114, 128, 0);    }
+}
+.flat-thinking.in-flight > .flat-summary .pulse-dot {
+  animation: pulse-dot-gray 1.2s ease-in-out infinite;
+}
+/* Per-step loading placeholder pulse dot — same neutral gray. */
+.thinking-loading .pulse-dot {
+  background: var(--text-dim);
+  box-shadow: 0 0 0 0 rgba(107, 114, 128, 0.4);
+  animation: pulse-dot-gray 1.2s ease-in-out infinite;
+}
+
+/* ----- Action — neutral chrome (no purple accent). The 🔧 icon +
+ * tool-name chip inside the body carry the identity; the block itself
+ * reads as a plain "something happened here" card, distinct from the
+ * purple Thinking block above. */
+.flat-action {
+  background: var(--panel);
+}
+.flat-action > .flat-block-body { padding-top: 8px; }
+/* Tighten the gap above the tool chip: the generic
+   `.flat-block-body > :first-child { margin-top: 12px }` plus the body's
+   padding-top otherwise stacks into a large gap between the "Action"
+   summary and the tool chip. Zero the chip's top margin so only the
+   (smaller) body padding-top separates them. */
+.flat-action > .flat-block-body > .action-tool-chip { margin-top: 0; }
+
+/* Tool identity chip inside the Action body — replaces the old
+ * "Action: tool_name" subtitle. Neutral slate styling so it doesn't
+ * compete with the purple Thinking chip's identity. */
+.action-tool-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  margin-bottom: 10px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--text);
+}
+.action-tool-chip-icon { font-size: 13px; line-height: 1; }
+.action-tool-chip-name {
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+
+/* ----- Observation — neutral chrome (no purple accent). Pending state
+ * keeps a dashed border (the visual cue for "still waiting") PLUS a
+ * subtle green gradient + gray pulse-dot that matches the thinking-
+ * loading placeholder — same "still in flight" affordance the user
+ * sees when the LLM hasn't returned its thinking content yet. Error
+ * state keeps the red wash so failures still pop. */
+.flat-observation {
+  background: var(--panel);
+}
+.flat-observation > .flat-summary { font-size: 12px; }
+.flat-observation > .flat-block-body { padding-top: 4px; }
+.flat-observation.pending {
+  border-style: dashed;
+}
+/* Pending → in-flight visual: same gradient + gray pulse pattern used by
+ * `.flat-thinking.in-flight`. Kept consistent so all "still loading"
+ * affordances in the chat share one look. */
+.flat-observation.pending > .flat-summary {
+  background: linear-gradient(90deg, var(--accent-soft) 0%, transparent 60%);
+}
+.flat-observation.pending > .flat-summary .flat-icon { color: var(--text-dim); }
+.flat-observation.pending > .flat-summary .pulse-dot {
+  background: var(--text-dim);
+  box-shadow: 0 0 0 0 rgba(107, 114, 128, 0.4);
+  animation: pulse-dot-gray 1.2s ease-in-out infinite;
+}
+/* Pending body — header (pulse-dot + label) on top, shimmer rows below.
+   Mirrors the structure of `.thinking-loading` so the "still waiting"
+   affordance reads identically whether the user is waiting for
+   thinking content or a tool result. */
+.flat-observation.pending > .flat-block-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.flat-observation.pending .result-pending {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 4px 12px 12px;
+  border-top: 1px solid var(--border);
+}
+.flat-observation.pending .result-pending-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-dim);
+  font-weight: 500;
+}
+.flat-observation.success { /* default — no override */ }
+.flat-observation.error {
+  border-color: var(--error);
+  background: var(--error-bg);
+}
+.flat-observation.error > .flat-summary { color: var(--error); }
+
+/* ----- Step raw-data panel (one per Agent step, rendered after the
+ * step's React-flow blocks). Deliberately styled NOT to match the
+ * purple-tinted React blocks above — it's a secondary entry point
+ * for inspecting raw I/O, not part of the live ReAct visualisation.
+ *
+ * Edge-to-edge within the chat width (no max-width cap), monospace
+ * summary text, dashed border, transparent body so it visually sinks
+ * behind the active panels above. When opened, two side-by-side
+ * columns render the request and response payloads. */
+.step-raw-data {
+  background: transparent;
+  border: 1px dashed var(--border);
+  border-radius: 4px;
+  margin-top: 4px;
+}
+.step-raw-data-summary {
+  cursor: pointer;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-dim);
+  user-select: none;
+  list-style: none;
+  padding: 6px 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.step-raw-data-summary:hover { background: var(--panel-2); }
+.step-raw-data-summary::-webkit-details-marker { display: none; }
+.step-raw-data-summary::before {
+  content: '▶';
+  font-size: 9px;
+  color: var(--text-dim);
+  margin-right: 2px;
+}
+details[open] > .step-raw-data-summary::before { content: '▼'; }
+.step-raw-data-icon { font-size: 12px; }
+
+.step-raw-data-body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  padding: 8px 12px 12px;
+  border-top: 1px dashed var(--border);
+}
+.step-raw-data-col {
+  min-width: 0;
+  overflow: hidden;
+  /* Flex column so the JSON panel can stretch to fill the grid cell.
+   * The grid already makes both columns equal height (align-items:
+   * stretch by default); stretching the inner panel makes the two
+   * text blocks under the titles line up at the same bottom edge. */
+  display: flex;
+  flex-direction: column;
+}
+/* Let the inner IO panel (from StepLLMIOPanel) grow to fill the column,
+ * so the request/response JSON blocks share an identical height. */
+.step-raw-data-col > .io-flat {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.step-raw-data-col .io-flat-json {
+  flex: 1;
+  min-height: 0;
+}
+.step-raw-data-col-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 6px 0 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+.step-raw-data-col-icon { font-size: 13px; }
+
+/* Stack columns on narrow viewports so neither side gets squashed. */
+@media (max-width: 720px) {
+  .step-raw-data-body { grid-template-columns: 1fr; gap: 8px; }
+}
+
+/* ----- Assistant block now reuses .msg.assistant (yellow palette) to
+ * mirror the user bubble's chrome. The .msg-role label "Assistant"
+ * sits at the top-left exactly like "You" on the user side, so the two
+ * read as a balanced conversation pair. */
+
+/* ----- User request panel (under the user bubble) — divider tinted in
+ * the user's accent so it reads as a continuation of the block above.
+ * The dashed line spans the full width of the bubble (so it visually
+ * "cuts off" the bubble like a section divider), while the summary
+ * itself stays inline-block so it shrinks to fit its text instead of
+ * stretching across the line. */
+.user-request-wrap {
+  /* Negative horizontal margins cancel the .msg padding (16px each side)
+   * so the dashed line stretches edge-to-edge of the bubble border. */
+  margin-top: 8px;
+  margin-left: -16px;
+  margin-right: -16px;
+  margin-bottom: -10px;
+  border-top: 1px dashed var(--assistant);
+  padding: 2px 16px 0 16px;
+}
+.user-request-summary {
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--assistant);
+  user-select: none;
+  list-style: none;
+  padding: 2px 0 0 0;
+  display: inline-block;
+}
+.user-request-summary:hover { opacity: 0.85; }
+.user-request-summary::-webkit-details-marker { display: none; }
+.user-request-summary::before {
+  content: '▶';
+  font-size: 9px;
+  color: var(--assistant);
+  margin-right: 6px;
+}
+details[open] > .user-request-summary::before { content: '▼'; }
+
+/* ----- Assistant response panel (under the Assistant block) — divider
+ * tinted in the assistant accent so it reads as a continuation of the
+ * block above. Mirrors .user-request-wrap: negative horizontal margins
+ * cancel .msg padding so the dashed line stretches edge-to-edge of the
+ * bubble border, while the summary keeps its own inset. */
+.assistant-response-wrap {
+  margin-top: 8px;
+  margin-left: -16px;
+  margin-right: -16px;
+  margin-bottom: -10px;
+  border-top: 1px dashed var(--accent);
+  padding: 2px 16px 0 16px;
+}
+.assistant-response-summary {
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--accent);
+  user-select: none;
+  list-style: none;
+  padding: 2px 0 0 0;
+  display: inline-block;
+}
+.assistant-response-summary:hover { opacity: 0.85; }
+.assistant-response-summary::-webkit-details-marker { display: none; }
+.assistant-response-summary::before {
+  content: '▶';
+  font-size: 9px;
+  color: var(--accent);
+  margin-right: 6px;
+}
+details[open] > .assistant-response-summary::before { content: '▼'; }

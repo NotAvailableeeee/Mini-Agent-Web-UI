@@ -4,7 +4,7 @@ import asyncio
 import json
 from pathlib import Path
 from time import perf_counter
-from typing import Optional
+from typing import Awaitable, Callable, Optional
 
 import tiktoken
 
@@ -53,6 +53,7 @@ class Agent:
         max_steps: int = 50,
         workspace_dir: str = "./workspace",
         token_limit: int = 80000,  # Summary triggered when tokens exceed this value
+        on_summary: Optional[Callable[[dict], Awaitable[None]]] = None,
     ):
         self.llm = llm_client
         self.tools = {tool.name: tool for tool in tools}
@@ -61,6 +62,12 @@ class Agent:
         self.workspace_dir = Path(workspace_dir)
         # Cancellation event for interrupting agent execution (set externally, e.g., by Esc key)
         self.cancel_event: Optional[asyncio.Event] = None
+        # Optional async callback invoked when message history is summarized.
+        # Receives dicts of shape:
+        #   {"event": "round", "round": int, "compressed_message_count": int, "summary_text": str}
+        #   {"event": "complete", "before_tokens": int, "after_tokens": int,
+        #    "summary_count": int, "user_round_count": int, "summaries": list[dict]}
+        self.on_summary = on_summary
 
         # Ensure workspace exists
         self.workspace_dir.mkdir(parents=True, exist_ok=True)
@@ -177,7 +184,7 @@ class Agent:
         # Rough estimation: average 2.5 characters = 1 token
         return int(total_chars / 2.5)
 
-    async def _summarize_messages(self):
+    async def _summarize_messages(self, on_summary: Optional[Callable[[dict], Awaitable[None]]] = None):
         """Message history summarization: summarize conversations between user messages when tokens exceed limit
 
         Strategy (Agent mode):
@@ -189,6 +196,11 @@ class Agent:
         Summary is triggered when EITHER:
         - Local token estimation exceeds limit
         - API reported total_tokens exceeds limit
+
+        If ``on_summary`` is provided, it is invoked once per generated summary
+        (``{"event": "round", ...}``) and once at the end (``{"event": "complete", ...}``).
+        Falls back to ``self.on_summary`` when not passed explicitly (so the
+        constructor-set callback is used by default).
         """
         # Skip check if we just completed a summary (wait for next LLM call to update api_total_tokens)
         if self._skip_next_token_check:
@@ -220,6 +232,7 @@ class Agent:
         # Build new message list
         new_messages = [self.messages[0]]  # Keep system prompt
         summary_count = 0
+        summary_payloads: list[dict] = []
 
         # Iterate through each user message and summarize the execution process after it
         for i, user_idx in enumerate(user_indices):
@@ -246,6 +259,19 @@ class Agent:
                     )
                     new_messages.append(summary_message)
                     summary_count += 1
+                    payload = {
+                        "round": i + 1,
+                        "compressed_message_count": len(execution_messages),
+                        "summary_text": summary_text,
+                    }
+                    summary_payloads.append(payload)
+                    # Notify observers (e.g. web UI) that one round was summarized.
+                    # Failures here must not break the agent loop.
+                    if on_summary:
+                        try:
+                            await on_summary({"event": "round", **payload})
+                        except Exception as cb_err:  # pragma: no cover
+                            print(f"{Colors.DIM}   on_summary callback error: {cb_err}{Colors.RESET}")
 
         # Replace message list
         self.messages = new_messages
@@ -258,6 +284,20 @@ class Agent:
         print(f"{Colors.BRIGHT_GREEN}✓ Summary completed, local tokens: {estimated_tokens} → {new_tokens}{Colors.RESET}")
         print(f"{Colors.DIM}  Structure: system + {len(user_indices)} user messages + {summary_count} summaries{Colors.RESET}")
         print(f"{Colors.DIM}  Note: API token count will update on next LLM call{Colors.RESET}")
+
+        # Fire the complete event after all per-round payloads have been sent.
+        if on_summary:
+            try:
+                await on_summary({
+                    "event": "complete",
+                    "before_tokens": estimated_tokens,
+                    "after_tokens": new_tokens,
+                    "summary_count": summary_count,
+                    "user_round_count": len(user_indices),
+                    "summaries": summary_payloads,
+                })
+            except Exception as cb_err:  # pragma: no cover
+                print(f"{Colors.DIM}   on_summary callback error: {cb_err}{Colors.RESET}")
 
     async def _create_summary(self, messages: list[Message], round_num: int) -> str:
         """Create summary for one execution round
@@ -350,7 +390,7 @@ Requirements:
 
             step_start_time = perf_counter()
             # Check and summarize message history to prevent context overflow
-            await self._summarize_messages()
+            await self._summarize_messages(self.on_summary)
 
             # Step header with proper width calculation
             BOX_WIDTH = 58
@@ -415,6 +455,16 @@ Requirements:
 
             # Check if task is complete (no tool calls)
             if not response.tool_calls:
+                # The pre-step check (line above the loop body) only sees
+                # api_total_tokens from the PREVIOUS LLM call. If THIS final
+                # step is the one that pushed tokens over the limit, no
+                # subsequent iteration will trigger summarization — so the
+                # history is left bloated and downstream observers (UI)
+                # never see a compression event. Run one last summary pass
+                # here to fix both: (a) clean state for any future run that
+                # reuses this agent, (b) emit on_summary so the web UI
+                # shows the 📦 card to the user.
+                await self._summarize_messages(self.on_summary)
                 step_elapsed = perf_counter() - step_start_time
                 total_elapsed = perf_counter() - run_start_time
                 print(f"\n{Colors.DIM}⏱️  Step {step + 1} completed in {step_elapsed:.2f}s (total: {total_elapsed:.2f}s){Colors.RESET}")
