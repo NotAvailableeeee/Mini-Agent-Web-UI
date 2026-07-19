@@ -323,7 +323,7 @@ button {
 }
 
 /* Compact variant — horizontal pill used in the rail.
- * Title wraps to up to 2 lines (long titles like "写 README / 整理资料"
+ * Title wraps to up to 2 lines (long titles like "写 docx 并转 PDF"
  * would otherwise get ellipsis-truncated in 180px). `line-clamp`
  * keeps the wrap bounded so a freakishly long title doesn't blow out
  * the card height; the `title` attribute on the button still surfaces
