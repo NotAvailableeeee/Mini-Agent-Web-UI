@@ -2,14 +2,14 @@
 
 > 一个面向 **AI 学习者 / Agent 学习者** 与 **准 AI 产品经理** 的可视化教学项目。
 > 基于 [MiniMax-AI/Mini-Agent](https://github.com/MiniMax-AI/Mini-Agent) 构建，
-> 把 Agent 的运行机制从"黑盒 CLI"拆解到"看得见的网页"。
+> 把 Agent 的运行机制从“黑盒 CLI”拆解到“看得见的网页”。
 > 总代码量 12,000+ 行：36 个源文件，覆盖前后端完整可视化层
 
 ## 一、项目背景
 
 ### 写给谁看？
 
-- **在学 AI / Agent 的学生** — 想真正理解"Agent 在干什么"，而不是停留在 ChatGPT 对话框；
+- **在学人工智能的学生** — 想真正理解“Agent 在干什么”，而不是停留在 Chat 范式；
 - **正在转岗 AI 产品经理的从业者**；
 - **任何对 Agent 内部运行机制好奇的人** — 但不太习惯命令行交互形式。
 
@@ -39,7 +39,7 @@
 
 所以我做了这个 **WebUI 版本** ——
 
-> 把 Agent 内部"思考 → 行动 → 观察 → 再思考 → 再行动 → ..."的循环，以及 Agent 初始化、作出答复、上下文压缩、记忆落盘的全过程，
+> 把 Agent 内部“思考 → 行动 → 观察 → 再思考 → 再行动 → ...”的循环，以及 Agent 初始化、作出答复、上下文压缩、记忆落盘的全过程，
 > **可视化地、一步一步地** 展示在网页上。
 > 你看到的不是一个最终答案，而是**得到这个答案的全过程**。
 
@@ -53,16 +53,12 @@
 
 - 左侧为短期记忆、长期记忆面板
 - 中间为对话区域，从上而下依次为
-  - Agent 初始化步骤显示区域
+  - Agent 初始化步骤跟踪显示区域
   - 累计上下文长度，可以观察拉满后压缩的过程
-  - 对话区域
-  - 发命令示例卡片
+  - 对话区域，会详尽地展示 Agent 运行的所有步骤，也会有原始数据可供查看
+  - 能力展示台/发送指令示例卡片
   - 输入框
 - 右侧为工作区展示，所有的操作都会在这个文件夹中进行
-
-项目初启动时会进行 Agent 初始化步骤，5 个步骤逐步点亮，完全同步后端时间节点：
-
-https://github.com/user-attachments/assets/c5046d56-97a9-4d19-b0d7-d2766be95ed7
 
 主题切换 / 布局个性化
 
@@ -72,11 +68,15 @@ https://github.com/user-attachments/assets/c5046d56-97a9-4d19-b0d7-d2766be95ed7
 - **整栏折叠**：每栏可折叠成 32px 的窄条；
 - 所有布局偏好都会保存，下次打开自动恢复。
 
+项目初启动时会进行 Agent 初始化步骤，5 个步骤逐步点亮，完全同步后端时间节点：
+
+https://github.com/user-attachments/assets/c5046d56-97a9-4d19-b0d7-d2766be95ed7
+
 ### 2.2 Agent 初始化追踪器
 
 **位置**：聊天面板顶部。
 
-**作用**：把 `Agent.__init__` 这一"黑盒时刻"拆成 **5 步**，一步一步给你看：
+**作用**：把 `Agent.__init__` 这一“黑盒时刻”拆成 **5 步**，一步一步给你看：
 
 | # | 步骤                                                  | 你能看到的                                                          |
 | - | ----------------------------------------------------- | ------------------------------------------------------------------- |
@@ -84,7 +84,7 @@ https://github.com/user-attachments/assets/c5046d56-97a9-4d19-b0d7-d2766be95ed7
 | 2 | **Build LLM client**                            | LLMClient 构造参数、端点、模型名                                    |
 | 3 | **Build tools**                                 | 注册了哪些工具（基础工具 + 工作区工具 + MCP / Skills）              |
 | 4 | **Load system prompt + inject skills metadata** | 最终被发给 LLM 的 system prompt 全文                                |
-| 5 | **Construct Agent**                             | Agent 的核心参数：`max_steps`、`token_limit`、`workspace_dir` |
+| 5 | **Construct Agent**                             | Agent 的核心参数：`max_steps`、`token_limit`、`workspace_dir`等 |
 
 **交互**：点击任意一个**已完成**的步骤槽，会展开该步骤的详情，
 详情里有 **真实执行过的源码片段**
@@ -102,22 +102,16 @@ https://github.com/user-attachments/assets/2e5e8d6b-db72-477c-9bf9-5f4ebcca24d2
 | ----------------------- | --------------------------------- | ------------------------------------------------- |
 | 🌐 生成网页             | `WriteTool`                     | 一个漂亮的 HTML 文件，可直接在右侧 workspace 预览 |
 | 📊 分析 CSV 数据        | `BashTool` + Python             | 一个带图表的 HTML 可视化报告                      |
-| 📄 生成 PDF 文档        | Claude Skill(`document-skills`) | 一份结构化的 PDF 文档                             |
+| 📄 生成 PDF 文档        | `document-skills/pdf` | 一份结构化的 PDF 文档                             |
 | 🔍 网页搜索与摘要       | MCP 工具（网页搜索）              | 300 字以内中文摘要                                |
 | 🛠️ 重构代码           | `WriteTool` + `EditTool`      | 一个重构前 + 一个重构后的 Python 脚本          |
-| 📝 写 README / 整理资料 | `WriteTool`                     | 一个结构化的`README.md`                         |
+| 📝 写 README / 整理资料 | `WriteTool` | 一个结构化的`README.md`                         |
 
 点击后，你可以在**对话区域 / 记忆面板 / 工作区**里看到它留下的所有"痕迹"。
 
-示例1：
+示例：
 
 https://github.com/user-attachments/assets/c59eb3cb-1600-4617-ac7c-3b659889ca38
-
-
-示例2（触发skill版）：
-
-https://github.com/user-attachments/assets/fd553e05-b919-40b7-b116-3e6d6c11d1b5
-
 
 
 ### 2.4 对话面板
@@ -128,7 +122,7 @@ https://github.com/user-attachments/assets/fd553e05-b919-40b7-b116-3e6d6c11d1b5
 
 > 🧠 **本节最核心的概念 —— Agent 的 Thought → Action → Observation 循环**：
 >
-> Agent 不是"一次对话给你答案"，而是反复执行下面这个循环，**直到 LLM 自己判断信息够了**：
+> Agent 不是“一次对话给你答案”，而是反复执行下面这个循环，**直到 LLM 自己判断信息够了**：
 >
 > ```
 >        ┌───────────────────────────────────────────┐
@@ -153,7 +147,7 @@ https://github.com/user-attachments/assets/fd553e05-b919-40b7-b116-3e6d6c11d1b5
 - ![action+observation](docs/assets/action+observation.png)
 - **Assistant 块**：模型输出给用户的响应，不可折叠，始终显示；
 - ![assistant](docs/assets/assistant.png)
-- **原始数据面板**：每步末尾的折叠面板，展开后并列显示 **发给 LLM 的完整 request**(system + messages + tools)和 **收到的原始 response**(content / thinking / tool_calls / usage)；
+- **原始数据面板**：每步末尾的折叠面板，展开后并列显示 **发给 LLM 的完整 request**(system + messages + tools)和 **收到的原始 response**(content / thinking / tool_calls)；
 - ![raw](docs/assets/raw.png)
 - **调用量小结**：整轮耗时 + token 柱状图 + 工具调用情况。
 - ![summary](docs/assets/summary.png)
@@ -200,7 +194,7 @@ https://github.com/user-attachments/assets/d7fc0373-b525-4897-b4aa-0f425094ce23
 
 **位置**：布局最左侧。
 
-**作用**：把 Agent 的"记忆"这一抽象概念拆成三栏，让你**一眼看清 Agent 在记什么**。
+**作用**：把 Agent 的“记忆”这一抽象概念拆成三栏，让你**一眼看清 Agent 在记什么**。
 
 #### 短期记忆(Short-term)
 
@@ -418,7 +412,7 @@ git clone https://github.com/MiniMax-AI/minimax_search.git
 
 > `HF_ENDPOINT` — `minimax_search` 内部会走 HuggingFace 拉资源，`hf-mirror.com` 是国内可用的镜像，否则大概率超时。
 
-> `HTTP_PROXY` / `HTTPS_PROXY` — 让 MCP 子进程继承本机代理，不然 `browse` 工具会失败。
+> `HTTP_PROXY` / `HTTPS_PROXY` — 让 MCP 子进程继承本机代理，不然 `browse` 工具会运行失败。
 
 **③ 给 `memory` 加显式落盘路径，方便查看知识图谱**
 
