@@ -64,6 +64,3 @@ CLAUDE.md
 # Web frontend (Vite/React)
 web/frontend/node_modules/
 web/frontend/dist/
-
-# README
-README.md
