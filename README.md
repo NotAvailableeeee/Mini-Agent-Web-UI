@@ -3,6 +3,7 @@
 > 一个面向 **AI 学习者 / Agent 学习者** 与 **准 AI 产品经理** 的可视化教学项目。
 > 基于 [MiniMax-AI/Mini-Agent](https://github.com/MiniMax-AI/Mini-Agent) 构建，
 > 把 Agent 的运行机制从"黑盒 CLI"拆解到"看得见的网页"。
+> 总代码量 12,000+ 行：36 个源文件，覆盖前后端完整可视化层
 
 ## 一、项目背景
 
