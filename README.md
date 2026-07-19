@@ -109,8 +109,14 @@ https://github.com/user-attachments/assets/2e5e8d6b-db72-477c-9bf9-5f4ebcca24d2
 
 点击后，你可以在**对话区域 / 记忆面板 / 工作区**里看到它留下的所有"痕迹"。
 
+示例1：
 
 https://github.com/user-attachments/assets/c59eb3cb-1600-4617-ac7c-3b659889ca38
+
+
+示例2（触发skill版）：
+
+https://github.com/user-attachments/assets/fd553e05-b919-40b7-b116-3e6d6c11d1b5
 
 
 
