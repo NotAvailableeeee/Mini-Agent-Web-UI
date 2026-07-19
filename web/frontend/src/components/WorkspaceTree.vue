@@ -94,6 +94,7 @@ function fileIcon(name) {
     py: '🐍', rb: '💎', go: '🦫', rs: '🦀', java: '☕', sh: '🐚',
     png: '🖼️', jpg: '🖼️', jpeg: '🖼️', gif: '🖼️', webp: '🖼️', svg: '🖼️',
     pdf: '📕',
+    doc: '📘', docx: '📘',
     csv: '📊', tsv: '📊',
     zip: '📦', tar: '📦', gz: '📦', '7z': '📦', rar: '📦',
   }

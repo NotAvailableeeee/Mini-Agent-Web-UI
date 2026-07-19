@@ -85,6 +85,7 @@ const kindLabel = computed(() => {
     html: 'HTML',
     image: 'IMAGE',
     pdf: 'PDF',
+    docx: 'DOCX',
     binary: 'BINARY',
   }
   return map[f.kind] || f.kind.toUpperCase()
@@ -218,6 +219,58 @@ const highlightedCode = computed(() => {
   return highlightWithLines(props.file.content, props.file.language)
 })
 
+// Render a single run (with bold/italic) to HTML. Used for both
+// paragraph-level text and table cells, so the formatting carries over
+// consistently. We re-use `escapeHtml` because the source strings
+// came straight out of OOXML and may contain `<`, `>`, `&` (e.g. an
+// agent-generated docx with user prose that includes angle brackets).
+function renderRun(run) {
+  let html = escapeHtml(run.text || '')
+  if (!html) return ''
+  if (run.bold) html = `<strong>${html}</strong>`
+  if (run.italic) html = `<em>${html}</em>`
+  return html
+}
+
+// Group consecutive list_item blocks so each list renders as a single
+// `<ul>` instead of one `<ul>` per bullet. Other block types pass
+// through unchanged — the template iterates the flat array and checks
+// `block.type` per item.
+const docxBlocks = computed(() => {
+  if (!props.file || props.file.kind !== 'docx') return []
+  return props.file.blocks || []
+})
+
+// Merge runs that share the same bold/italic flags into a single span
+// so the rendered output doesn't fragment `<strong><em>a</em></strong>`
+// into a dozen tiny tags. Doesn't change what the user sees; just
+// keeps the DOM slimmer for large documents.
+function joinRuns(runs) {
+  if (!runs || runs.length === 0) return ''
+  let out = ''
+  let curBold = null
+  let curItalic = null
+  let buf = ''
+  const flush = () => {
+    if (!buf) return
+    let html = escapeHtml(buf)
+    if (curBold) html = `<strong>${html}</strong>`
+    if (curItalic) html = `<em>${html}</em>`
+    out += html
+    buf = ''
+  }
+  for (const run of runs) {
+    if ((run.bold || false) !== curBold || (run.italic || false) !== curItalic) {
+      flush()
+      curBold = run.bold || false
+      curItalic = run.italic || false
+    }
+    buf += run.text || ''
+  }
+  flush()
+  return out
+}
+
 function formatSize(bytes) {
   if (bytes == null) return ''
   if (bytes < 1024) return `${bytes} B`
@@ -333,6 +386,45 @@ function formatSize(bytes) {
             :data-language="file.language"
             v-html="highlightedCode"
           ></pre>
+
+          <!-- docx → render the structural blocks extracted by the
+               backend. Headings use semantic h1…h6 (Title was
+               promoted to h1 by the backend); paragraphs keep their
+               runs so bold/italic carry through; consecutive
+               list_items are wrapped in a single <ul> for correct
+               list semantics; tables render as <table> so the
+               layout is preserved. run-level bold/italic are merged
+               into the fewest possible tags via joinRuns(). -->
+          <div v-else-if="file.kind === 'docx'" class="modal-docx">
+            <div v-if="!docxBlocks.length" class="modal-docx-empty">
+              未能从此 Word 文档中提取到任何文本内容（可能为空文件或格式异常）。
+              <a :href="binaryDataUrl" :download="file.name" class="modal-download">下载 {{ file.name }}</a>
+            </div>
+            <template v-else>
+              <template v-for="(block, bi) in docxBlocks" :key="bi">
+                <h1 v-if="block.type === 'heading' && block.level === 1" class="modal-docx-h1" v-html="joinRuns(block.runs)"></h1>
+                <h2 v-else-if="block.type === 'heading' && block.level === 2" class="modal-docx-h2" v-html="joinRuns(block.runs)"></h2>
+                <h3 v-else-if="block.type === 'heading' && block.level === 3" class="modal-docx-h3" v-html="joinRuns(block.runs)"></h3>
+                <h4 v-else-if="block.type === 'heading' && block.level === 4" class="modal-docx-h4" v-html="joinRuns(block.runs)"></h4>
+                <h5 v-else-if="block.type === 'heading' && block.level === 5" class="modal-docx-h5" v-html="joinRuns(block.runs)"></h5>
+                <h6 v-else-if="block.type === 'heading'" class="modal-docx-h6" v-html="joinRuns(block.runs)"></h6>
+
+                <p v-else-if="block.type === 'paragraph'" class="modal-docx-p" v-html="joinRuns(block.runs)"></p>
+
+                <ul v-else-if="block.type === 'list_item'" class="modal-docx-ul">
+                  <li v-html="joinRuns(block.runs)"></li>
+                </ul>
+
+                <table v-else-if="block.type === 'table_row'" class="modal-docx-table">
+                  <tr>
+                    <td v-for="(cell, ci) in block.cells" :key="ci" v-html="joinRuns(cell)"></td>
+                  </tr>
+                </table>
+
+                <div v-else-if="block.type === 'empty'" class="modal-docx-empty-line"></div>
+              </template>
+            </template>
+          </div>
 
           <!-- Sandboxed iframe for HTML. `sandbox=""` (no allow-* tokens)
                means no scripts, no same-origin, no top navigation — the

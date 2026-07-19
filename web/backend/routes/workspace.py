@@ -20,8 +20,11 @@ Filtering:
 from __future__ import annotations
 
 import base64
+import io
 import json
 import mimetypes
+import xml.etree.ElementTree as ET
+import zipfile
 from pathlib import Path
 from typing import Any
 
@@ -99,6 +102,159 @@ def _safe_resolve(workspace: Path, raw_path: str) -> Path:
     except ValueError as exc:
         raise HTTPException(status_code=403, detail="path escapes workspace") from exc
     return candidate
+
+
+# WordprocessingML namespace — declared once so the helper below doesn't
+# have to repeat the long URI on every tag lookup. `{ns}tag` is the
+# standard ElementTree qualified-name form.
+W_NS = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
+
+
+def _w(tag: str) -> str:
+    """Return a qualified WordprocessingML tag name for ET.find/findall."""
+    return f"{{{W_NS['w']}}}{tag}"
+
+
+def _extract_runs(p: ET.Element) -> list[dict[str, Any]]:
+    """Pull every `<w:r>` inside a paragraph into a list of run dicts.
+
+    Each run carries its visible text plus the bold/italic flags from
+    the run's `<w:rPr>`. Empty `<w:r>` elements are skipped. We don't
+    try to faithfully reproduce every OOXML formatting attribute — the
+    preview is a viewer, not a renderer — but bold + italic cover the
+    vast majority of inline formatting users care about.
+    """
+    runs: list[dict[str, Any]] = []
+    for r in p.findall(_w("r")):
+        rpr = r.find(_w("rPr"))
+        bold = rpr is not None and rpr.find(_w("b")) is not None
+        italic = rpr is not None and rpr.find(_w("i")) is not None
+        # A run can contain several `<w:t>` children (rare but legal);
+        # concatenating preserves the visible text in order.
+        text_parts = [t.text or "" for t in r.findall(_w("t"))]
+        text = "".join(text_parts)
+        if not text:
+            continue
+        runs.append({"text": text, "bold": bold, "italic": italic})
+    return runs
+
+
+def _extract_docx_blocks(data: bytes) -> list[dict[str, Any]]:
+    """Convert a .docx byte stream into a list of structural blocks.
+
+    A .docx file is a ZIP archive; the document body lives at
+    `word/document.xml`. We avoid the `python-docx` dependency so this
+    endpoint has no extra install cost, and we tolerate whatever XML
+    shape Word actually produces (extra namespaces, attributes, etc.)
+    by sticking to a couple of tag lookups via the `w:` namespace.
+
+    Block kinds returned:
+      - {"type": "heading", "level": int, "runs": [...]}
+      - {"type": "paragraph", "runs": [...]}
+      - {"type": "list_item", "level": int, "runs": [...]}
+      - {"type": "table_row", "cells": [[run, ...], ...]}
+      - {"type": "empty"}              # paragraph with no text (visual gap)
+
+    Paragraph-style names coming out of Word are e.g. "Title",
+    "Heading1"…"Heading9", "ListParagraph", "ListBullet*",
+    "ListNumber*". We map those to heading level / list-item detection
+    via cheap substring checks rather than maintaining a full style
+    table — good enough for a preview.
+    """
+    blocks: list[dict[str, Any]] = []
+    try:
+        with zipfile.ZipFile(io.BytesIO(data)) as z:
+            with z.open("word/document.xml") as f:
+                tree = ET.parse(f)
+    except (zipfile.BadZipFile, KeyError, ET.ParseError):
+        # Either not a real .docx, the archive is missing the body, or
+        # the XML is broken — let the caller fall back to the binary
+        # path with a friendly error.
+        return blocks
+
+    root = tree.getroot()
+    body = root.find(_w("body"))
+    if body is None:
+        return blocks
+
+    for child in body:
+        tag = child.tag
+        # Tables are first-class siblings of paragraphs in OOXML; pull
+        # them out before the paragraph fall-through so a `<w:tbl>`
+        # doesn't end up under `else`.
+        if tag == _w("tbl"):
+            for row in child.findall(_w("tr")):
+                cells: list[list[dict[str, Any]]] = []
+                for tc in row.findall(_w("tc")):
+                    cell_runs: list[dict[str, Any]] = []
+                    for p in tc.findall(_w("p")):
+                        cell_runs.extend(_extract_runs(p))
+                    if not cell_runs:
+                        # Table cell with zero text — keep a single empty
+                        # run so the UI renders the cell as a blank box
+                        # instead of collapsing the column.
+                        cell_runs.append({"text": "", "bold": False, "italic": False})
+                    cells.append(cell_runs)
+                if cells:
+                    blocks.append({"type": "table_row", "cells": cells})
+            continue
+
+        if tag != _w("p"):
+            # Section properties (`<w:sectPr>`) and other body
+            # children don't carry user-visible content; skip silently.
+            continue
+
+        runs = _extract_runs(child)
+        ppr = child.find(_w("pPr"))
+        style = ""
+        if ppr is not None:
+            pstyle = ppr.find(_w("pStyle"))
+            if pstyle is not None:
+                style = pstyle.get(_w("val"), "") or ""
+
+        if not runs and not style:
+            # Visual gap (empty paragraph) — emit a marker so the UI
+            # can decide whether to render breathing room or skip.
+            blocks.append({"type": "empty"})
+            continue
+
+        # Heading detection: "Title", "Subtitle", "Heading1"…
+        # "Heading9". Title = level 1, Heading1 = level 2, etc., so the
+        # document title sits above all `<w:pStyle val="Heading1">`
+        # sections — matching what Word does on-screen.
+        if style == "Title":
+            blocks.append({"type": "heading", "level": 1, "runs": runs or [{"text": "", "bold": False, "italic": False}]})
+            continue
+        lower = style.lower()
+        if lower.startswith("heading"):
+            suffix = lower[len("heading"):]
+            # Try numeric suffix; non-numeric heading styles ("Heading"
+            # body style etc.) drop to plain paragraph.
+            try:
+                level = int(suffix)
+            except ValueError:
+                blocks.append({"type": "paragraph", "runs": runs})
+                continue
+            # Heading1 → <h2> on screen so Title still owns <h1>.
+            blocks.append({"type": "heading", "level": min(level + 1, 6), "runs": runs or [{"text": "", "bold": False, "italic": False}]})
+            continue
+
+        # List-item detection by style name — Word emits ListParagraph,
+        # ListBullet, ListBullet2, ListNumber, etc. For numbered styles
+        # we still emit a list_item block; the UI can distinguish by
+        # inspecting a leading digit+separator if it wants a number,
+        # but the simplest UX is "• " prefix for everything.
+        if "list" in lower:
+            blocks.append({"type": "list_item", "level": 1, "runs": runs})
+            continue
+
+        if not runs:
+            blocks.append({"type": "empty"})
+            continue
+
+        blocks.append({"type": "paragraph", "runs": runs})
+
+    return blocks
 
 
 def _build_tree(directory: Path, workspace: Path, depth: int) -> list[dict[str, Any]]:
@@ -190,6 +346,16 @@ class FileContent(BaseModel):
     # bad lines visually (so users can spot a typo'd entity/relation
     # that the graph silently ignored).
     records: list[dict] | None = None
+    # When kind == "docx": a list of structural blocks (headings,
+    # paragraphs, list items) extracted from the .docx XML. Same
+    # shape used internally by `_extract_docx_blocks`:
+    #   {"type": "heading", "level": int, "runs": [{"text", "bold", "italic"}, ...]}
+    #   {"type": "paragraph", "runs": [{"text", "bold", "italic"}, ...]}
+    #   {"type": "list_item", "level": int, "runs": [{"text", "bold", "italic"}, ...]}
+    #   {"type": "table_row", "cells": [[{"text", "bold", "italic"}, ...], ...]}
+    # `runs` preserves bold/italic from `<w:rPr>` so the UI can render
+    # formatting without re-parsing the OOXML.
+    blocks: list[dict] | None = None
     truncated: bool = False
     truncated_size: int | None = None  # bytes actually read when truncated
 
@@ -227,6 +393,7 @@ async def workspace_file(path: str = Query(..., description="Path relative to wo
     ext = target.suffix.lower()
     language: str | None = None  # populated for code/markdown/json kinds
     records: list[dict] | None = None  # populated only for kind=="jsonl"
+    blocks: list[dict] | None = None   # populated only for kind=="docx"
 
     # Classify the file. Order matters: image and pdf are subsets of
     # "binary" but get their own kinds so the UI can render them inline.
@@ -241,6 +408,23 @@ async def workspace_file(path: str = Query(..., description="Path relative to wo
     elif mime == "text/html" or ext in (".html", ".htm"):
         kind = "html"
         content = data.decode("utf-8", errors="replace")
+        language = None
+    elif ext == ".docx":
+        # docx = ZIP container around word/document.xml. The OOXML
+        # parser below survives malformed/missing pieces and returns
+        # an empty list on failure; the kind still becomes "docx" so
+        # the UI can show its own "no extractable content" message
+        # instead of the generic binary fallback.
+        blocks = _extract_docx_blocks(data)
+        kind = "docx"
+        content = ""  # body lives in `blocks`, not `content`
+        language = None
+    elif ext == ".doc":
+        # Legacy binary .doc is a different format (not a ZIP) and not
+        # worth re-implementing here. Surface as a download so users
+        # can open it in Word / LibreOffice.
+        kind = "binary"
+        content = base64.b64encode(data).decode("ascii")
         language = None
     elif mime == "text/markdown" or ext in (".md", ".markdown"):
         # Rendered as markdown in the UI — distinguishing from
@@ -363,6 +547,7 @@ async def workspace_file(path: str = Query(..., description="Path relative to wo
         content=content,
         language=language,
         records=records if kind == "jsonl" else None,
+        blocks=blocks if kind == "docx" else None,
         truncated=truncated,
         truncated_size=MAX_FILE_SIZE if truncated else None,
     )

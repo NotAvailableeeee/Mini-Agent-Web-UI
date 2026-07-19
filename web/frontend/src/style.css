@@ -1562,6 +1562,94 @@ button {
   transition: opacity .15s;
 }
 .modal-download:hover { opacity: 0.9; }
+
+/* docx — structural view of a Word document. Uses the same monospace
+ * padded "page" container as the markdown renderer so multi-page
+ * documents scroll like a sheet of paper. Headings carry their own
+ * sizes (h1 is the largest, matching Word's "Title" promotion on the
+ * backend). */
+.modal-docx {
+  font-family: var(--font-sans);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.65;
+  padding: 24px 40px;
+  max-width: 820px;
+  margin: 0 auto;
+}
+.modal-docx-empty {
+  text-align: center;
+  color: var(--text-dim);
+  padding: 60px 20px;
+}
+.modal-docx-empty .modal-download { margin-top: 16px; }
+.modal-docx-h1 {
+  font-size: 26px;
+  font-weight: 700;
+  margin: 0 0 14px;
+  color: var(--text);
+}
+.modal-docx-h2 {
+  font-size: 20px;
+  font-weight: 700;
+  margin: 24px 0 12px;
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 6px;
+}
+.modal-docx-h3 {
+  font-size: 17px;
+  font-weight: 600;
+  margin: 20px 0 10px;
+  color: var(--text);
+}
+.modal-docx-h4 {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 16px 0 8px;
+  color: var(--text);
+}
+.modal-docx-h5,
+.modal-docx-h6 {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 14px 0 6px;
+  color: var(--text-dim);
+}
+.modal-docx-p {
+  margin: 0 0 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.modal-docx-ul {
+  margin: 0 0 14px;
+  padding-left: 24px;
+  list-style-type: disc;
+}
+.modal-docx-ul li {
+  margin: 4px 0;
+  line-height: 1.6;
+}
+/* The backend emits one `<ul>` per bullet so the iteration loop
+ * stays simple; tighten the spacing between consecutive lists so
+ * they read as a single list visually. */
+.modal-docx-ul + .modal-docx-ul { margin-top: -10px; }
+.modal-docx-table {
+  border-collapse: collapse;
+  margin: 12px 0 18px;
+  width: 100%;
+  font-size: 13px;
+}
+.modal-docx-table td,
+.modal-docx-table th {
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  vertical-align: top;
+  background: var(--panel);
+}
+.modal-docx-empty-line {
+  height: 12px;
+}
 .modal-truncated {
   padding: 10px 18px;
   background: #fef3c7;

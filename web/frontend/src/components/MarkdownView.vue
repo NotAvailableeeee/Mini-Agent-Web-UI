@@ -25,7 +25,7 @@
  * post-processing the sanitized HTML string.
  */
 
-import { computed } from 'vue'
+import { computed, inject } from 'vue'
 import MarkdownIt from 'markdown-it'
 import DOMPurify from 'dompurify'
 import hljs from 'highlight.js/lib/core'
@@ -102,6 +102,130 @@ md.renderer.rules.link_open = function (tokens, idx, options, env, self) {
   return defaultLinkOpen(tokens, idx, options, env, self)
 }
 
+// Inline rule: turn recognised workspace-relative paths in the assistant
+// reply text into <a class="file-link" data-file-path="…"> tokens the click
+// handler can open in FilePreviewModal.
+//
+// Why this lives here (and not in ThinkingBlock / ActionBlock etc.):
+// MarkdownView is the ONLY place assistant reply text gets rendered
+// through markdown-it; ThinkingBlock uses raw <pre> and ActionBlock uses
+// <ToolArgs>, neither go through this pipeline.
+//
+// Why only multi-segment paths: bare filenames like `app.py` collide with
+// prose too often. We require at least one `/` plus a known file
+// extension, so mentions like "let me read mini_agent/agent.py" become a
+// clickable link while inline-code, code-block, and prose sentence
+// fragments don't. markdown-it tokenises code_inline / code_block into
+// their own token types BEFORE inline `text` rules run, so mentions inside
+// backticks or fenced blocks are naturally skipped.
+//
+// We run this before `emphasis` (markdown-it tries higher-priority rules
+// first; emphasis uses `_`/`*` markers that would otherwise fragment a
+// path like `mini_agent/agent.py` into `mini_` + `agent/agent.py`). We
+// also bail when already inside a markdown link so a path nested inside
+// another [text](url) doesn't produce invalid <a>-in-<a> HTML.
+md.inline.ruler.before('emphasis', 'file_link', function fileLink(state, silent) {
+  // Bail when nested inside an outer markdown link's text region.
+  let depth = 0
+  for (const t of state.tokens) {
+    if (t.type === 'link_open') depth++
+    else if (t.type === 'link_close') depth--
+  }
+  if (depth > 0) return false
+
+  const start = state.pos
+  const max = state.posMax
+  if (start >= max) return false
+
+  // Require the previous char to be whitespace or a punctuation char that
+  // breaks a path token — avoids matching the tail of words like
+  // "myapp.py/baz". If we're at the start of the text region, no check.
+  if (start > 0) {
+    const prev = state.src.charCodeAt(start - 1)
+    const isBoundary =
+      prev === 0x5F /* _ */ ||
+      prev === 0x20 || prev === 0x09 || prev === 0x0A || prev === 0x0D || // whitespace
+      prev === 0x28 /* ( */ || prev === 0x5B /* [ */ || prev === 0x7B /* { */ ||
+      prev === 0x22 /* " */ || prev === 0x27 /* ' */ || prev === 0x60 /* ` */ ||
+      prev === 0x3C /* < */ || prev === 0x3E /* > */ || prev === 0x3D /* = */ ||
+      prev === 0x2C /* , */ || prev === 0x3B /* ; */ || prev === 0x2A /* * */
+    if (!isBoundary) return false
+  }
+
+  // Greedily consume chars that could appear in a path segment or
+  // extension separator. Stop on the first non-path char.
+  let len = 0
+  while (start + len < max) {
+    const c = state.src.charCodeAt(start + len)
+    if (
+      (c >= 0x30 && c <= 0x39) || // 0-9
+      (c >= 0x41 && c <= 0x5A) || // A-Z
+      (c >= 0x61 && c <= 0x7A) || // a-z
+      c === 0x2F /* / */ ||
+      c === 0x5F /* _ */ ||
+      c === 0x2D /* - */
+    ) {
+      len++
+    } else if (c === 0x2E /* . */ && len > 0) {
+      // Allow a `.` separator only if we're not already on a `./` or `..`.
+      const prevC = state.src.charCodeAt(start + len - 1)
+      if (prevC === 0x2E || prevC === 0x2F) break
+      len++
+    } else {
+      break
+    }
+  }
+  if (len === 0) return false
+
+  const candidate = state.src.slice(start, start + len)
+  // Hard-required: at least one `/`, and a known extension at the end.
+  // The extension allowlist mirrors the workspace tree's code/text kinds
+  // in `web/backend/routes/workspace.py` so we never link binary files.
+  if (!candidate.includes('/')) return false
+  const extMatch = candidate.match(
+    /^[\w][\w-]*(?:\/[\w][\w.-]*){1,3}\.(py|js|jsx|ts|tsx|json|md|txt|yaml|yml|toml|csv|html|css|scss|vue|sh|sql|go|rs|java|c|cpp|h|hpp|xml|log|env|lock)$/,
+  )
+  if (!extMatch) return false
+
+  // Reject `..` as a path segment (defense in depth — backend _safe_resolve
+  // already 403s these, but we'd rather produce no link than a 403 click).
+  if (/(^|\/)\.\.(\/|$)/.test(candidate)) return false
+
+  if (silent) return true
+
+  const linkOpen = state.push('link_open', 'a', 1)
+  linkOpen.attrs = [
+    ['href', '#'],
+    ['class', 'file-link'],
+    ['data-file-path', candidate],
+  ]
+  const textToken = state.push('text', '', 0)
+  textToken.content = candidate
+  state.push('link_close', 'a', -1)
+
+  state.pos = start + len
+  return true
+})
+
+// Injected by App.vue — `openWorkspaceFile(path)` opens the preview modal.
+// Null-safe so MarkdownView still works when used standalone (e.g. inside
+// FilePreviewModal which renders MarkdownView for markdown files; that
+// case deliberately has no opener).
+const openFile = inject('openWorkspaceFile', null)
+
+function onMdClick(e) {
+  const a = e.target?.closest && e.target.closest('a.file-link')
+  if (!a) return
+  e.preventDefault()
+  const path = a.getAttribute('data-file-path')
+  if (!path) return
+  openFile?.({
+    path,
+    name: path.split('/').pop(),
+    size: 0,
+  })
+}
+
 const html = computed(() => {
   if (!props.source) return ''
   const raw = md.render(props.source)
@@ -109,14 +233,14 @@ const html = computed(() => {
     // hljs wraps tokens in spans with class="hljs-keyword" etc.
     // DOMPurify's default config would drop unknown attrs, so we
     // whitelist `class` on every element to keep the highlighting.
-    ADD_ATTR: ['target', 'rel', 'class'],
+    ADD_ATTR: ['target', 'rel', 'class', 'data-file-path'],
   })
 })
 </script>
 
 <template>
   <!-- eslint-disable-next-line vue/no-v-html -->
-  <div class="md" v-if="source" v-html="html"></div>
+  <div class="md" v-if="source" v-html="html" @click="onMdClick"></div>
 </template>
 
 <style scoped>
@@ -229,5 +353,21 @@ const html = computed(() => {
 .md :deep(img) {
   max-width: 100%;
   border-radius: 4px;
+}
+
+/* File-path tokens emitted by the markdown-it `file_link` inline rule.
+   Dashed underline differentiates them from regular hyperlinks (which use
+   a solid border-bottom on hover) so the user can spot them at a glance in
+   a multi-paragraph assistant reply. Click handling lives on the wrapper
+   `.md` div (event delegation); see onMdClick in <script setup>. */
+.md :deep(a.file-link) {
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px dashed var(--accent);
+  cursor: pointer;
+}
+.md :deep(a.file-link:hover) {
+  background: var(--accent-soft);
+  border-bottom-style: solid;
 }
 </style>

@@ -1,5 +1,5 @@
 <script setup>
-import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { nextTick, onBeforeUnmount, onMounted, provide, ref } from 'vue'
 import ChatPanel from './components/ChatPanel.vue'
 import WorkspaceTree from './components/WorkspaceTree.vue'
 import FilePreviewModal from './components/FilePreviewModal.vue'
@@ -419,6 +419,14 @@ async function handleFileSelect(meta) {
     previewError.value = err.message
   }
 }
+
+// Expose handleFileSelect via provide/inject so MarkdownView (nested 4
+// levels deep in AssistantBlock → TurnContent → ChatPanel → App) can open
+// the preview modal when the user clicks a file-path token in the LLM's
+// assistant reply. The contract matches WorkspaceTree's @file-select
+// emitter ({ path, name, size }); MarkdownView populates `name` from the
+// path's basename and `size: 0` since it has no other signal.
+provide('openWorkspaceFile', handleFileSelect)
 
 function handlePreviewClose() {
   showPreviewModal.value = false
