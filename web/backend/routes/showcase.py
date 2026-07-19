@@ -6,7 +6,7 @@ Cards are aligned with the demos documented in README_CN:
 3. 生成 PDF 文档
 4. 网页搜索与摘要
 5. 重构代码
-6. 写 docx 并转 PDF
+6. 写 README / 整理资料
 """
 
 from __future__ import annotations
@@ -85,20 +85,15 @@ CARDS: List[ShowcaseCard] = [
         tags=["Skill: WriteTool + EditTool", "输出: Python"],
     ),
     ShowcaseCard(
-        id="docx-to-pdf",
-        icon="📘",
-        title="写 docx 并转 PDF",
-        description=(
-            "先用 document-skills 写一份结构化的 .docx，"
-            "再把它转成 PDF，全流程可在 workspace 预览。"
-        ),
+        id="write-readme",
+        icon="📝",
+        title="写 README / 整理资料",
+        description="用 WriteTool 输出结构化的 README.md",
         prompt=(
-            "请用 document-skills 写一份关于 Mini-Agent 的 docx 介绍文档，"
-            "包含项目简介、核心能力、3 个使用示例；"
-            "写完后用 pandoc（或 LibreOffice）把它转成 PDF，"
-            "两个文件都保留在工作区。"
+            "请在当前工作区生成一份 README.md，主题是 "
+            "'Mini-Agent 入门指南'，包含项目简介、3 个使用示例、快速开始步骤。"
         ),
-        tags=["Skill: document-skills", "输出: DOCX + PDF"],
+        tags=["Skill: WriteTool", "输出: README.md"],
     ),
 ]
 
